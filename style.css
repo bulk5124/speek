@@ -212,6 +212,64 @@ main {
   min-height: 1.5rem;
 }
 
+.peer-actions .btn.tiny {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.75rem;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 32, 43, 0.35);
+  z-index: 40;
+  animation: fadeIn 0.18s ease;
+}
+
+.modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  width: min(420px, calc(100% - 2rem));
+  padding: 1.35rem 1.25rem 1.2rem;
+  border-radius: var(--radius);
+  background: #f7fafc;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+  animation: popIn 0.22s ease;
+}
+
+.modal h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--display);
+  font-size: 1.25rem;
+}
+
+.modal p {
+  margin: 0 0 1.1rem;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
 #spaceInput {
   letter-spacing: 0.02em;
 }

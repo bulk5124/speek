@@ -18,9 +18,16 @@ Du brauchst **kein** Node.js, **kein** WLAN-Setup und **keine** Firewall.
 
 ---
 
-## 3. Speeken (Raumcode)
+## 3. Speeken
 
-Wenn ihr sprechen wollt:
+### Option A — Code anfragen (1:1, empfohlen)
+
+1. In der Online-Liste bei der Person **Code anfragen** tippen.
+2. Die andere Person sieht die Anfrage und tippt **Annehmen** oder **Ablehnen**.
+3. Bei Annehmen bekommen beide einen **6-Zeichen-Code** (~10 Min gültig) und treten automatisch dem **1:1**-Raum bei.
+4. Mikrofon erlauben → Partner antippen falls nötig → **Halten & speeken**.
+
+### Option B — Raumcode manuell
 
 1. **Mit Raumcode speeken** öffnen (oder in der Lobby **Raumcode eingeben**).
 2. Raumcode eingeben **oder** **Neu** erzeugen — denselben Code den anderen geben (**nicht öffentlich posten**).
@@ -31,16 +38,15 @@ Wenn ihr sprechen wollt:
 | **1:1** | Nur mit **einer** Person speeken. Nach dem Beitritt die Person in der Liste antippen. |
 | **Gruppe** | Alle im Raum hören dich, wenn du die Taste hältst. |
 
-4. **Mikrofon & Raum beitreten** → Mikrofon erlauben → **Halten & speeken** (oder **Leertaste**).
-
-Später: pro Person in der Online-Liste **Code anfragen** (folgt in einem weiteren Update).
+4. **Beitreten** → Mikrofon erlauben → **Halten & speeken** (oder **Leertaste**).
 
 ---
 
 ## Sicherheit (kurz)
 
 - **Raumcode geheim halten** — er ist der Zugangsschutz zum Gespräch.
-- Nach dem Gespräch **neuen Code** erzeugen.
+- Gepaarte Codes laufen nach ca. **10 Minuten** ab.
+- Nach dem Gespräch **neuen Code** erzeugen oder neu anfragen.
 - Die Stimme ist **Ende-zu-Ende verschlüsselt** (WebRTC). Der Server sieht nur die Verbindungsdaten, nicht was ihr sagt.
 - Die Lobby zeigt nur **Anwesenheit** (Name/Gerät/Status), keinen Sprachinhalt.
 

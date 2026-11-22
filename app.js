@@ -1,15 +1,16 @@
 /**
  * Speek hosted — firm lobby presence + room-code PTT over PeerJS cloud + WebRTC media (DTLS-SRTP).
- * Lobby: well-known PeerJS id `speek-lobby-<space>` for Online list (no room code yet).
+ * Lobby: well-known PeerJS id `speeklobby{space}` for Online list (no room code yet).
  * Voice: PeerJS DataConnections for presence; MediaConnections for P2P audio.
  * PeerJS room host-ID prefix `scv1` is protocol-stable — keep for room compatibility.
  *
- * Pairing hooks (for follow-up PR "Code anfragen"):
- * - CustomEvent `speek:lobby-peer-actions` — detail: { peer, actionsEl, spaceId }
- * - CustomEvent `speek:lobby-peers-changed` — detail: { peers, spaceId, self }
- * - window.__speek.lobby — getPeers / getSelf / getSpaceId / on / off
- * - each lobby row: .peer-actions container + data-peer-id
+ * Safe-code pairing (`pairing.js`):
+ * - Injects „Code anfragen“ via `speek:lobby-peer-actions`
+ * - PeerJS DataConnection protocol: pair-request / pair-approve / pair-deny
+ * - 6-char room codes, ~10 min TTL, auto-join 1:1
  */
+
+import { createPairingController, PAIR_TTL_MS } from './pairing.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -52,6 +53,13 @@ const els = {
   leaveRoomBtn: $('leaveRoomBtn'),
   talkHint: $('talkHint'),
   sessionGuide: $('sessionGuide'),
+  pairHint: $('pairHint'),
+  pairModal: $('pairModal'),
+  pairModalBackdrop: $('pairModalBackdrop'),
+  pairModalTitle: $('pairModalTitle'),
+  pairModalBody: $('pairModalBody'),
+  pairApproveBtn: $('pairApproveBtn'),
+  pairDenyBtn: $('pairDenyBtn'),
 };
 
 const PEER_OPTS = {
@@ -76,6 +84,8 @@ const LOBBY_HEARTBEAT_MS = 12000;
 const state = {
   mode: 'one', // 'one' | 'group'
   roomCode: '',
+  /** Optional expiry for paired safe-codes (ms epoch); null = no limit */
+  roomExpiresAt: null,
   displayName: '',
   peer: null,
   selfId: null,
@@ -95,6 +105,9 @@ const state = {
   pttDown: false,
   destroyed: false,
 };
+
+/** @type {ReturnType<typeof createPairingController>|null} */
+let pairing = null;
 
 /** Firm lobby presence (separate PeerJS session from voice rooms). */
 const lobby = {
@@ -226,6 +239,38 @@ function saveRoom(code) {
   } catch {
     /* ignore */
   }
+}
+
+function saveRoomExpiry(code, expiresAt) {
+  try {
+    if (!expiresAt) {
+      localStorage.removeItem('speek-room-expires');
+      return;
+    }
+    localStorage.setItem(
+      'speek-room-expires',
+      JSON.stringify({ code: normalizeRoom(code), expiresAt: Number(expiresAt) })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadRoomExpiry(code) {
+  try {
+    const raw = localStorage.getItem('speek-room-expires');
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || normalizeRoom(data.code) !== normalizeRoom(code)) return null;
+    return Number(data.expiresAt) || null;
+  } catch {
+    return null;
+  }
+}
+
+function clearRoomExpiry() {
+  state.roomExpiresAt = null;
+  saveRoomExpiry('', null);
 }
 
 function savedSpace() {
@@ -380,6 +425,8 @@ function attachLobbyDataConn(conn, remoteHintId) {
   conn.on('open', () => {
     conn.send(JSON.stringify({ type: 'lobby-hello', peer: lobbySelfMeta() }));
     if (lobby.isHost) pushLobbyPeerList();
+    // Pairing listens on the same DataConnection for pair-* messages.
+    pairing?.wireConn(conn);
   });
 
   conn.on('data', (data) => {
@@ -401,6 +448,50 @@ function attachLobbyDataConn(conn, remoteHintId) {
   conn.on('error', () => {
     /* closed elsewhere */
   });
+}
+
+/** Open or reuse a lobby DataConnection to a peer (for pairing signaling). */
+async function connectLobbyPeer(peerId) {
+  if (!lobby.peer) throw new Error('Lobby nicht verbunden');
+  if (!peerId || peerId === lobby.selfId) throw new Error('Ungültiger Peer');
+
+  const existing = lobby.dataCons.get(peerId);
+  if (existing?.open) {
+    pairing?.wireConn(existing);
+    return existing;
+  }
+
+  if (existing) {
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('Peer-Verbindung Timeout')), 10000);
+      existing.on('open', () => {
+        clearTimeout(t);
+        resolve();
+      });
+      existing.on('error', (e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+    });
+    pairing?.wireConn(existing);
+    return existing;
+  }
+
+  const conn = lobby.peer.connect(peerId, { reliable: true });
+  attachLobbyDataConn(conn, peerId);
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('Peer nicht erreichbar')), 12000);
+    conn.on('open', () => {
+      clearTimeout(t);
+      resolve();
+    });
+    conn.on('error', (e) => {
+      clearTimeout(t);
+      reject(e);
+    });
+  });
+  pairing?.wireConn(conn);
+  return conn;
 }
 
 function onPresence(msg, fromId) {
@@ -1218,14 +1309,27 @@ async function join() {
     return;
   }
 
+  const expiresAt = state.roomExpiresAt || loadRoomExpiry(roomCode);
+  if (expiresAt && Date.now() > expiresAt) {
+    els.joinHint.textContent =
+      'Dieser gepaarte Raumcode ist abgelaufen (ca. 10 Min.). Bitte neu anfragen oder „Neu“ tippen.';
+    els.joinHint.classList.add('warn');
+    clearRoomExpiry();
+    if (els.roomJoinDetails) els.roomJoinDetails.open = true;
+    return;
+  }
+
   const name =
     (els.nameInput.value.trim() || state.displayName || lobby.displayName) ||
     `Gast-${Math.floor(Math.random() * 90 + 10)}`;
   state.displayName = name;
   state.mode = selectedMode();
   state.roomCode = roomCode;
+  state.roomExpiresAt = expiresAt || null;
   saveName(name);
   saveRoom(roomCode);
+  if (expiresAt) saveRoomExpiry(roomCode, expiresAt);
+  else saveRoomExpiry(roomCode, null);
 
   els.joinBtn.disabled = true;
   els.joinBtn.textContent = 'Verbinde…';
@@ -1334,6 +1438,7 @@ function cleanupLobby() {
 
 function leaveRoom() {
   cleanupSession();
+  clearRoomExpiry();
   els.sessionPanel.classList.add('hidden');
   els.talkDock.classList.add('hidden');
   els.joinBtn.disabled = false;
@@ -1347,6 +1452,36 @@ function leaveRoom() {
     setLobbyStatus(lobby.isHost ? 'Online · Lobby-Host' : 'Online');
   } else {
     els.lobbyJoinPanel.classList.remove('hidden');
+  }
+}
+
+/** Auto-join after pair-approve (always 1:1, short-lived code). Keeps lobby session (busy). */
+async function joinWithPairedCode({ roomCode, expiresAt, peerName }) {
+  const code = normalizeRoom(roomCode);
+  els.roomInput.value = code;
+  state.roomExpiresAt = expiresAt || Date.now() + PAIR_TTL_MS;
+  saveRoomExpiry(code, state.roomExpiresAt);
+  const one = document.querySelector('input[name="mode"][value="one"]');
+  if (one) one.checked = true;
+  els.joinHint.classList.remove('warn');
+  els.joinHint.textContent = peerName
+    ? `Gepaart mit ${peerName} — trete dem 1:1-Raum bei…`
+    : 'Gepaarter Code — trete dem 1:1-Raum bei…';
+  if (els.roomJoinDetails) els.roomJoinDetails.open = true;
+  await join();
+}
+
+function initPairing() {
+  pairing = createPairingController({
+    getSelfMeta: () => (lobby.selfId ? lobbySelfMeta() : null),
+    connectPeer: connectLobbyPeer,
+    onApprovedJoin: (info) => joinWithPairedCode(info),
+    els,
+  });
+  pairing.bindUi();
+  // Wire any lobby connections that already exist.
+  for (const conn of lobby.dataCons.values()) {
+    if (conn.open) pairing.wireConn(conn);
   }
 }
 
@@ -1409,8 +1544,10 @@ function boot() {
   }
 
   bindPtt();
+  initPairing();
   els.genRoomBtn.addEventListener('click', () => {
     els.roomInput.value = generateRoomCode();
+    clearRoomExpiry();
   });
   els.enterLobbyBtn.addEventListener('click', () => {
     if (lobby.selfId && lobby.peer) {
@@ -1440,7 +1577,7 @@ function boot() {
   els.leaveLobbyBtn.addEventListener('click', leaveLobby);
   els.openRoomFromLobbyBtn.addEventListener('click', showRoomJoinFromLobby);
 
-  // Expose for automated tests + pairing follow-up PR
+  // Expose for automated tests + pairing
   const lobbyApi = {
     getPeers: () =>
       [...lobby.peers.values()].map(({ id, name, device, status }) => ({
@@ -1452,6 +1589,7 @@ function boot() {
     getSelf: () => (lobby.selfId ? lobbySelfMeta() : null),
     getSpaceId: () => lobby.spaceId || null,
     isConnected: () => !!(lobby.peer && lobby.selfId),
+    connectPeer: connectLobbyPeer,
     lobbyPeerId,
     normalizeSpace,
     on: onLobbyEvent,
@@ -1463,6 +1601,7 @@ function boot() {
       selfId: state.selfId,
       isHost: state.isHost,
       roomCode: state.roomCode,
+      roomExpiresAt: state.roomExpiresAt,
       mode: state.mode,
       peerCount: state.peers.size,
       peers: [...state.peers.values()].map((p) => ({ id: p.id, name: p.name })),
@@ -1475,6 +1614,9 @@ function boot() {
     hostPeerId,
     lobbyPeerId,
     normalizeSpace,
+    joinWithPairedCode,
+    requestPair: (peerId, name) => pairing?.requestCode(peerId, name),
+    approvePair: () => pairing?.approveIncoming(),
     lobby: lobbyApi,
   };
   window.__speek = testApi;

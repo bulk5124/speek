@@ -11,10 +11,14 @@ Kein Node auf dem Gerät · kein lokales WLAN nötig · keine Firewall-Freigabe.
 1. Gehostete HTTPS-URL öffnen (Cursor Publish oder lokaler Testserver).
 2. Namen tippen, optional **Firma / Space** (Standard `firm`) → **Lobby betreten**.
 3. Unter **Online** siehst du andere im Space — **ohne Raumcode**.
-4. Zum Speeken: **Mit Raumcode speeken** / **Raumcode eingeben**, Code teilen oder erzeugen.
-5. Modus **1:1** oder **Gruppe** → Mikrofon → **Halten & speeken** (oder **Leertaste**).
+4. Zum Speeken:
+   - **Safe-code pairing:** bei einer Person **Code anfragen** → die Person tippt **Annehmen** → beide landen automatisch im **1:1**-Raum (6-Zeichen-Code, ~10 Min gültig).
+   - **Manuell:** **Mit Raumcode speeken** / Code teilen oder **Neu**.
+5. Mikrofon → **Halten & speeken** (oder **Leertaste**).
 
 Ausführlich: [`START.md`](./START.md)
+
+**Stacking:** Dieses Branch baut auf `feature/speek-lobby` (PR #2). Bei Bedarf auf den aktuellen Lobby-Head rebasen.
 
 ---
 
@@ -23,8 +27,9 @@ Ausführlich: [`START.md`](./START.md)
 | Thema | Bedeutung |
 |--------|-----------|
 | **Raumcode = Zugang** | Wer den Code kennt, kann dem Raum beitreten. |
+| **Safe-code pairing** | Code nur nach Freigabe; 6 Zeichen, ca. **10 Minuten** gültig. |
 | **Geheim halten** | Nicht öffentlich posten (Chat-Kanäle, Social Media). |
-| **Nach der Session** | Neuen Code erzeugen (**Neu**). |
+| **Nach der Session** | Neuen Code erzeugen (**Neu**) oder neu anfragen. |
 | **Verschlüsselung** | Sprache läuft **Ende-zu-Ende** über WebRTC **DTLS-SRTP** (Peer-to-Peer). Signaling (PeerJS) sieht nur SDP/ICE und Anwesenheit — keinen Sprachinhalt. |
 | **Keine Secrets im Client** | Keine API-Keys; öffentliche STUN + PeerJS-Cloud. |
 
@@ -38,7 +43,7 @@ Ausführlich: [`START.md`](./START.md)
 - **Medien:** WebRTC `MediaConnection` (Audio-Tracks), PTT via `MediaStreamTrack.enabled` (unverändert)
 - **1:1:** eine Medienverbindung zum gewählten Peer
 - **Gruppe:** Mesh zwischen Teilnehmern im Raum (kleine Gruppen)
-- **Pairing-Hooks:** `window.__speek.lobby` + Events `speek:lobby-peer-actions` / `speek:lobby-peers-changed` (Slot `.peer-actions` für „Code anfragen“)
+- **Safe-code pairing:** `pairing.js` — DataConnection `pair-request` / `pair-approve` / `pair-deny`; UI-Hook `speek:lobby-peer-actions` → „Code anfragen“
 
 Optionaler **lokaler** LAN-Pfad bleibt unter `apps/lan-ptt/` (eigener Node-Server) — nicht Teil dieses Hosted-Flows.
 
@@ -61,6 +66,7 @@ Automatische Signaling-Tests (Playwright):
 npm install
 npm run test:join
 npm run test:lobby
+npm run test:pairing
 ```
 
 ---
