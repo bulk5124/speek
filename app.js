@@ -659,7 +659,7 @@ function wireCall(call, peerId) {
     }
     audio.srcObject = remoteStream;
     audio.play().catch(() => {
-      els.talkHint.textContent = 'Tippe einmal auf die Sprechtaste, um Audio freizugeben.';
+      els.talkHint.textContent = 'Einmal tippen für Audio.';
     });
   });
 
@@ -744,7 +744,7 @@ function renderPeers() {
 
   if (state.mode === 'group' && peers.length > 0) {
     els.talkDock.classList.remove('hidden');
-    els.talkTarget.innerHTML = `Gruppe · <strong>${peers.length}</strong> andere`;
+    els.talkTarget.innerHTML = `Gruppe · <strong>${peers.length}</strong>`;
     els.leaveTalkBtn.classList.add('hidden');
   }
 }
@@ -818,10 +818,10 @@ async function selectPeer(peerId) {
 
   state.activePeerId = peerId;
   const peer = state.peers.get(peerId);
-  els.talkTarget.innerHTML = `Speeken mit <strong>${escapeHtml(peer.name)}</strong>`;
+  els.talkTarget.innerHTML = `<strong>${escapeHtml(peer.name)}</strong>`;
   els.talkDock.classList.remove('hidden');
   els.leaveTalkBtn.classList.remove('hidden');
-  els.talkHint.textContent = 'Audio wird verbunden…';
+  els.talkHint.textContent = 'Verbinde…';
   renderPeers();
 
   try {
@@ -838,10 +838,10 @@ async function selectPeer(peerId) {
         }
       }
     }
-    els.talkHint.textContent = 'Taste halten (oder Leertaste) zum Speeken.';
+    els.talkHint.textContent = '';
   } catch (err) {
     console.error(err);
-    els.talkHint.textContent = `Verbindung fehlgeschlagen: ${err.message || err}`;
+    els.talkHint.textContent = `Fehler: ${err.message || err}`;
   }
 }
 
@@ -986,7 +986,7 @@ async function createAsHostOrGuest(roomCode) {
   attachDataConn(conn, hostId);
 
   await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('Raum-Host nicht erreichbar. Code prüfen oder neuen erzeugen.')), 12000);
+    const t = setTimeout(() => reject(new Error('Host nicht erreichbar.')), 12000);
     conn.on('open', () => {
       clearTimeout(t);
       resolve();
@@ -1069,7 +1069,7 @@ function wirePeerEvents() {
   });
 
   peer.on('disconnected', () => {
-    setStatus('Getrennt — reconnect…', true);
+    setStatus('Reconnect…', true);
     try {
       peer.reconnect();
     } catch {
@@ -1204,15 +1204,14 @@ async function enterLobby() {
 
 async function join() {
   if (!isSecureEnough()) {
-    els.joinHint.textContent =
-      'Mikrofon braucht HTTPS (oder localhost). Bitte die gehostete HTTPS-URL öffnen.';
+    els.joinHint.textContent = 'Mikrofon braucht HTTPS (oder localhost).';
     els.joinHint.classList.add('warn');
     return;
   }
 
   const roomCode = normalizeRoom(els.roomInput.value);
   if (roomCode.length < 4) {
-    els.joinHint.textContent = 'Raumcode mindestens 4 Zeichen (Buchstaben/Zahlen).';
+    els.joinHint.textContent = 'Raumcode: mind. 4 Zeichen.';
     els.joinHint.classList.add('warn');
     if (els.roomJoinDetails) els.roomJoinDetails.open = true;
     return;
@@ -1230,7 +1229,7 @@ async function join() {
   els.joinBtn.disabled = true;
   els.joinBtn.textContent = 'Verbinde…';
   els.joinHint.classList.remove('warn');
-  els.joinHint.textContent = 'Signaling über PeerJS…';
+  els.joinHint.textContent = '';
 
   try {
     await ensureMic();
@@ -1240,7 +1239,7 @@ async function join() {
     els.youName.textContent = name;
     els.roomLabel.textContent = roomCode;
     els.modeChip.textContent = state.mode === 'group' ? 'Gruppe' : '1:1';
-    setStatus(state.isHost ? 'Online · Raum-Host' : 'Online');
+    setStatus(state.isHost ? 'Host' : 'Online');
 
     els.lobbyJoinPanel.classList.add('hidden');
     els.lobbyPanel.classList.add('hidden');
@@ -1249,7 +1248,7 @@ async function join() {
     if (state.mode === 'group') {
       els.talkDock.classList.remove('hidden');
       els.leaveTalkBtn.classList.add('hidden');
-      els.talkTarget.textContent = 'Gruppe — halten zum Speeken an alle';
+      els.talkTarget.textContent = 'Gruppe';
     }
 
     setLobbyBusy(true);
@@ -1258,8 +1257,8 @@ async function join() {
     console.error(err);
     cleanupSession();
     els.joinBtn.disabled = false;
-    els.joinBtn.textContent = 'Mikrofon & Raum beitreten';
-    els.joinHint.textContent = `Beitritt fehlgeschlagen: ${err.message || err}`;
+    els.joinBtn.textContent = 'Beitreten';
+    els.joinHint.textContent = `Fehler: ${err.message || err}`;
     els.joinHint.classList.add('warn');
     if (els.roomJoinDetails) els.roomJoinDetails.open = true;
   }
@@ -1333,8 +1332,8 @@ function leaveRoom() {
   els.sessionPanel.classList.add('hidden');
   els.talkDock.classList.add('hidden');
   els.joinBtn.disabled = false;
-  els.joinBtn.textContent = 'Mikrofon & Raum beitreten';
-  els.joinHint.textContent = 'Teile den Raumcode nur mit Personen, die mitreden sollen.';
+  els.joinBtn.textContent = 'Beitreten';
+  els.joinHint.textContent = '';
   els.joinHint.classList.remove('warn');
   renderPeers();
 
@@ -1387,7 +1386,7 @@ function returnToLobbyUi() {
 
 function boot() {
   if (typeof Peer === 'undefined') {
-    els.lobbyJoinHint.textContent = 'PeerJS konnte nicht geladen werden.';
+    els.lobbyJoinHint.textContent = 'PeerJS fehlt.';
     els.lobbyJoinHint.classList.add('warn');
     els.enterLobbyBtn.disabled = true;
     els.joinBtn.disabled = true;
@@ -1400,8 +1399,7 @@ function boot() {
   els.roomInput.value = room;
 
   if (!isSecureEnough()) {
-    els.lobbyJoinHint.textContent =
-      'Diese Seite ist kein Secure Context — Lobby/Mikrofon brauchen HTTPS (oder localhost).';
+    els.lobbyJoinHint.textContent = 'Kein Secure Context — HTTPS nutzen.';
     els.lobbyJoinHint.classList.add('warn');
   }
 

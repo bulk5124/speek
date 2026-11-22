@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light" />
-  <meta name="description" content="Speek — Firm-Lobby-Anwesenheit und Push-to-Talk per Raumcode, Ende-zu-Ende verschlüsselt über WebRTC." />
+  <meta name="description" content="Speek — Lobby Online und Push-to-Talk." />
   <title>Speek</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,18 +19,16 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <h1>Speek</h1>
     </div>
-    <p class="tagline">Firmen-Space · Online sehen · Dann speeken</p>
-    <p class="encrypt-banner" role="note">
-      Stimme ist <strong>Ende-zu-Ende verschlüsselt</strong> (WebRTC DTLS-SRTP), Peer-to-Peer.
-      Signaling tauscht nur SDP/ICE und Anwesenheit — kein Sprachinhalt.
-    </p>
   </header>
 
   <main>
     <section class="join-panel" id="lobbyJoinPanel">
+      <!-- Hook for extra lobby/space UI. Keep id stable. -->
+      <div id="lobbySlot" class="ext-slot" hidden></div>
+
       <label class="field">
-        <span>Dein Name</span>
-        <input id="nameInput" type="text" maxlength="40" autocomplete="nickname" placeholder="z.&nbsp;B. Markus" />
+        <span>Name</span>
+        <input id="nameInput" type="text" maxlength="40" autocomplete="nickname" placeholder="Name" />
       </label>
 
       <label class="field">
@@ -39,43 +37,36 @@
       </label>
 
       <button type="button" class="btn primary" id="enterLobbyBtn">Lobby betreten</button>
-      <p class="hint" id="lobbyJoinHint">Gleicher Space = gleiche Online-Liste. Raumcode brauchst du erst zum Speeken.</p>
+      <p class="hint" id="lobbyJoinHint">Gleicher Space = gleiche Online-Liste.</p>
 
       <details class="room-details" id="roomJoinDetails">
         <summary>Mit Raumcode speeken</summary>
         <div class="room-details-body" id="joinPanel">
-          <label class="field">
+          <label class="field" id="roomField">
             <span>Raumcode</span>
             <div class="room-row">
-              <input id="roomInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="z.&nbsp;B. KATZE7" inputmode="text" />
+              <input id="roomInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="KATZE7" inputmode="text" />
               <button type="button" class="btn secondary" id="genRoomBtn" title="Neuen Code erzeugen">Neu</button>
             </div>
           </label>
+
+          <!-- Hook for pairing/QR UI. Keep id stable. -->
+          <div id="pairingSlot" class="ext-slot" hidden></div>
 
           <fieldset class="mode-field">
             <legend>Modus</legend>
             <label class="mode-option">
               <input type="radio" name="mode" value="one" checked />
-              <span>
-                <strong>1:1</strong>
-                <small>Einen Partner im Raum wählen — nur der hört dich</small>
-              </span>
+              <span><strong>1:1</strong></span>
             </label>
             <label class="mode-option">
               <input type="radio" name="mode" value="group" />
-              <span>
-                <strong>Gruppe</strong>
-                <small>PTT an alle, die gerade im Raum sind</small>
-              </span>
+              <span><strong>Gruppe</strong></span>
             </label>
           </fieldset>
 
-          <button type="button" class="btn primary" id="joinBtn">Mikrofon &amp; Raum beitreten</button>
-          <p class="hint" id="joinHint">Teile den Raumcode nur mit Personen, die mitreden sollen.</p>
-          <p class="security-note">
-            <strong>Sicherheit:</strong> Wer den Raumcode kennt, kann beitreten.
-            Code geheim halten, nach der Session neu erzeugen, nicht öffentlich posten.
-          </p>
+          <button type="button" class="btn primary" id="joinBtn">Beitreten</button>
+          <p class="hint" id="joinHint"></p>
         </div>
       </details>
     </section>
@@ -83,7 +74,7 @@
     <section class="session hidden" id="lobbyPanel">
       <div class="you-row">
         <div>
-          <p class="eyebrow">Du · Space <span id="spaceLabel">—</span></p>
+          <p class="eyebrow">Space <span id="spaceLabel">—</span></p>
           <p class="you-name" id="lobbyYouName">—</p>
         </div>
         <p class="status-pill" id="lobbyStatus">Verbinde…</p>
@@ -94,12 +85,12 @@
         <span class="count" id="lobbyPeerCount">0</span>
       </div>
       <ul class="peer-list lobby-list" id="lobbyPeerList"></ul>
-      <p class="empty" id="emptyLobby">Noch niemand sonst in diesem Space. Kolleg:innen denselben Space-Namen nennen lassen.</p>
+      <p class="empty" id="emptyLobby">Noch niemand sonst in diesem Space.</p>
 
       <details class="room-details room-from-lobby" id="lobbyRoomDetails">
         <summary>Mit Raumcode speeken</summary>
         <div class="room-details-body">
-          <p class="hint lobby-room-copy">Raumcode teilen — oder später über „Code anfragen“ (folgt).</p>
+          <p class="hint lobby-room-copy">Raumcode teilen — oder später „Code anfragen“.</p>
           <button type="button" class="btn secondary" id="openRoomFromLobbyBtn">Raumcode eingeben</button>
         </div>
       </details>
@@ -110,7 +101,7 @@
     <section class="session hidden" id="sessionPanel">
       <div class="you-row">
         <div>
-          <p class="eyebrow">Du · Raum <span id="roomLabel">—</span></p>
+          <p class="eyebrow">Raum <span id="roomLabel">—</span></p>
           <p class="you-name" id="youName">—</p>
           <p class="mode-chip" id="modeChip">1:1</p>
         </div>
@@ -122,25 +113,20 @@
         <span class="count" id="peerCount">0</span>
       </div>
       <ul class="peer-list" id="peerList"></ul>
-      <p class="empty" id="emptyPeers">Noch niemand sonst. Öffne denselben Link auf dem Handy/PC und gib denselben Raumcode ein.</p>
+      <p class="empty" id="emptyPeers">Warte auf andere…</p>
 
       <div class="talk-dock hidden" id="talkDock">
         <p class="talk-target" id="talkTarget">Bereit</p>
         <button type="button" class="ptt" id="pttBtn" aria-pressed="false">
           <span class="ptt-label">Halten &amp; speeken</span>
-          <span class="ptt-sub">Leertaste / Finger halten</span>
         </button>
-        <button type="button" class="btn ghost" id="leaveTalkBtn">Zurück zur Liste</button>
+        <button type="button" class="btn ghost" id="leaveTalkBtn">Zurück</button>
         <p class="talk-hint" id="talkHint"></p>
       </div>
 
-      <button type="button" class="btn ghost leave-room" id="leaveRoomBtn">Raum verlassen</button>
+      <button type="button" class="btn ghost leave-room" id="leaveRoomBtn">Verlassen</button>
     </section>
   </main>
-
-  <footer class="foot">
-    <p>Kostenlos · kein App-Install · Signaling über PeerJS-Cloud · Medien nur P2P.</p>
-  </footer>
 
   <script src="./vendor/peerjs.min.js"></script>
   <script src="./app.js" type="module"></script>
