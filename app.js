@@ -11,6 +11,7 @@
  */
 
 import { createPairingController, PAIR_TTL_MS } from './pairing.js';
+import { generateRoomCode } from './room-code.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -76,7 +77,6 @@ const PEER_OPTS = {
   },
 };
 
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const AVATAR_COLORS = ['#0b6e6e', '#2a5f8f', '#8a4b2a', '#5a4a8f', '#2f6b6b', '#6b3a4a'];
 const DEFAULT_SPACE = 'firm';
 const LOBBY_HEARTBEAT_MS = 12000;
@@ -146,13 +146,6 @@ function normalizeSpace(raw) {
     .replace(/^-|-$/g, '')
     .slice(0, 32);
   return cleaned || DEFAULT_SPACE;
-}
-
-function generateRoomCode() {
-  let out = '';
-  const bytes = crypto.getRandomValues(new Uint8Array(5));
-  for (const b of bytes) out += CODE_ALPHABET[b % CODE_ALPHABET.length];
-  return out;
 }
 
 function hostPeerId(roomCode) {
@@ -1545,6 +1538,7 @@ function boot() {
 
   bindPtt();
   initPairing();
+  // Neu always draws a fresh CSPRNG code (shared helper — pairing can call the same).
   els.genRoomBtn.addEventListener('click', () => {
     els.roomInput.value = generateRoomCode();
     clearRoomExpiry();
@@ -1596,6 +1590,7 @@ function boot() {
     off: (eventName, handler) => lobbyListeners.get(eventName)?.delete(handler),
   };
 
+  // Expose for automated tests + pairing agents (import ./room-code.js or use this).
   const testApi = {
     getState: () => ({
       selfId: state.selfId,
@@ -1617,6 +1612,7 @@ function boot() {
     joinWithPairedCode,
     requestPair: (peerId, name) => pairing?.requestCode(peerId, name),
     approvePair: () => pairing?.approveIncoming(),
+    generateRoomCode,
     lobby: lobbyApi,
   };
   window.__speek = testApi;

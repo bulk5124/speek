@@ -2,9 +2,12 @@
   "name": "speek",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Speek — hosted room-code push-to-talk via PeerJS + WebRTC",
   "scripts": {
     "start": "python3 -m http.server 8765 --bind 127.0.0.1",
+    "test": "node scripts/test-room-code.mjs",
+    "test:room-code": "node scripts/test-room-code.mjs",
     "test:join": "node scripts/test-join.mjs",
     "test:lobby": "node scripts/test-lobby.mjs",
     "test:pairing": "node scripts/test-pairing.mjs"
