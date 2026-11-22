@@ -1,6 +1,6 @@
 # Speek (hosted)
 
-Browser-only Push-to-Talk: **gleichen Link** öffnen, optional **Firmen-Space** betreten (Online-Liste), dann **Raumcode** zum Speeken.
+Browser-only Push-to-Talk: **gleichen Link** öffnen, **Namen** eingeben → gemeinsame **Lobby** (Online-Liste) → **Code anfragen** oder **Raumcode** zum Speeken.
 
 Kein Node auf dem Gerät · kein lokales WLAN nötig · keine Firewall-Freigabe.
 
@@ -9,8 +9,8 @@ Kein Node auf dem Gerät · kein lokales WLAN nötig · keine Firewall-Freigabe.
 ## START (30 Sekunden)
 
 1. Gehostete HTTPS-URL öffnen (Cursor Publish oder lokaler Testserver).
-2. Namen tippen, optional **Firma / Space** (Standard `firm`) → **Lobby betreten**.
-3. Unter **Online** siehst du andere im Space — **ohne Raumcode**.
+2. **Namen** tippen → **Lobby betreten** (eine gemeinsame Lobby für alle).
+3. Unter **Lobby** siehst du, **wer online ist** — **ohne Raumcode**.
 4. Zum Speeken:
    - **Safe-code pairing:** bei einer Person **Code anfragen** → die Person tippt **Annehmen** → beide landen automatisch im **1:1**-Raum (6-Zeichen-Code, ~10 Min gültig).
    - **Manuell:** **Mit Raumcode speeken** / Code teilen oder **Neu**.
@@ -35,7 +35,7 @@ Ausführlich: [`START.md`](./START.md)
 ## Technik
 
 - **Frontend:** statisches HTML/CSS/JS
-- **Firm-Lobby:** PeerJS-Hub-ID `speeklobby{space}` (Space normalisiert, Default `firm`) — Online-Liste + Status
+- **Shared Lobby:** PeerJS-Hub-ID `speeklobbydefault` — eine Online-Liste für alle
 - **Signaling / Room presence:** PeerJS Cloud (`0.peerjs.com`) — Raum-Host-Peer-ID `scv1{code}`
 - **Medien:** WebRTC `MediaConnection` (Audio-Tracks), PTT via `MediaStreamTrack.enabled` (unverändert)
 - **1:1:** eine Medienverbindung zum gewählten Peer

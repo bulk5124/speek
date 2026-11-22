@@ -10,7 +10,6 @@ import { chromium } from 'playwright';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 8768;
-const SPACE = 'pairtest' + Math.floor(Math.random() * 9000 + 1000);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -61,7 +60,6 @@ async function enterLobby(page, name) {
 
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await page.fill('#nameInput', name);
-  await page.fill('#spaceInput', SPACE);
   await page.click('#enterLobbyBtn');
   await page.waitForFunction(() => window.__speek?.lobby?.isConnected?.() === true, null, {
     timeout: 25000,
@@ -79,7 +77,7 @@ async function main() {
     const pageA = await (await browser.newContext()).newPage();
     const pageB = await (await browser.newContext()).newPage();
 
-    console.log(`Space: ${SPACE}`);
+    console.log('Shared lobby pairing');
     await enterLobby(pageA, 'Alice');
     await enterLobby(pageB, 'Bob');
 
