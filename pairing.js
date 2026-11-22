@@ -5,19 +5,20 @@
  * → both join 1:1 Speek room. Codes are 6 chars, TTL ~10 minutes.
  *
  * Integrates with lobby via `speek:lobby-peer-actions` / connectPeer(peerId).
+ * Room codes: shared `generateRoomCode()` from ./room-code.js (CSPRNG, no word list).
  */
 
+import { CODE_LENGTH, generateRoomCode } from './room-code.js';
+
 export const PAIR_TTL_MS = 10 * 60 * 1000;
-export const PAIR_CODE_LEN = 6;
+export const PAIR_CODE_LEN = CODE_LENGTH;
 
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
+/** Alias for pairing call sites — same helper as join UI Neu. */
 export function generateSafeRoomCode() {
-  let out = '';
-  const bytes = crypto.getRandomValues(new Uint8Array(PAIR_CODE_LEN));
-  for (const b of bytes) out += CODE_ALPHABET[b % CODE_ALPHABET.length];
-  return out;
+  return generateRoomCode(PAIR_CODE_LEN);
 }
+
+export { generateRoomCode };
 
 export function requestId() {
   const bytes = crypto.getRandomValues(new Uint8Array(8));

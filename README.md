@@ -18,10 +18,6 @@ Kein Node auf dem Gerät · kein lokales WLAN nötig · keine Firewall-Freigabe.
 
 Ausführlich: [`START.md`](./START.md)
 
-**Stacking:** Dieses Branch baut auf `feature/speek-lobby` (PR #2). Bei Bedarf auf den aktuellen Lobby-Head rebasen.
-
----
-
 ## Sicherheit
 
 | Thema | Bedeutung |
@@ -30,6 +26,7 @@ Ausführlich: [`START.md`](./START.md)
 | **Safe-code pairing** | Code nur nach Freigabe; 6 Zeichen, ca. **10 Minuten** gültig. |
 | **Geheim halten** | Nicht öffentlich posten (Chat-Kanäle, Social Media). |
 | **Nach der Session** | Neuen Code erzeugen (**Neu**) oder neu anfragen. |
+| **Raumcode-Zufall** | `crypto.getRandomValues` über gemeinsamen Helper [`room-code.js`](./room-code.js) (`generateRoomCode`) — 6 Zeichen aus eindeutigem Alphabet, kein Wortlisten-Zyklus. Eindeutigkeit ist birthday-bound (kein used-codes-DB; absichtlich serverless). |
 | **Verschlüsselung** | Sprache läuft **Ende-zu-Ende** über WebRTC **DTLS-SRTP** (Peer-to-Peer). Signaling (PeerJS) sieht nur SDP/ICE und Anwesenheit — keinen Sprachinhalt. |
 | **Keine Secrets im Client** | Keine API-Keys; öffentliche STUN + PeerJS-Cloud. |
 
@@ -64,6 +61,7 @@ Automatische Signaling-Tests (Playwright):
 
 ```bash
 npm install
+npm test              # room-code crypto helper
 npm run test:join
 npm run test:lobby
 npm run test:pairing
