@@ -95,17 +95,28 @@
       </div>
       <ul class="peer-list lobby-list" id="lobbyPeerList"></ul>
       <p class="empty" id="emptyLobby">Noch niemand sonst in diesem Space.</p>
+      <p class="hint" id="pairHint"></p>
 
       <details class="room-details room-from-lobby" id="lobbyRoomDetails">
         <summary>Mit Raumcode speeken</summary>
         <div class="room-details-body">
-          <p class="hint lobby-room-copy">Raumcode teilen — oder später „Code anfragen“.</p>
+          <p class="hint lobby-room-copy">Raumcode teilen — oder „Code anfragen“ bei einer Online-Person.</p>
           <button type="button" class="btn secondary" id="openRoomFromLobbyBtn">Raumcode eingeben</button>
         </div>
       </details>
 
       <button type="button" class="btn ghost leave-room" id="leaveLobbyBtn">Lobby verlassen</button>
     </section>
+
+    <div class="modal-backdrop hidden" id="pairModalBackdrop"></div>
+    <div class="modal hidden" id="pairModal" role="dialog" aria-modal="true" aria-labelledby="pairModalTitle">
+      <h2 id="pairModalTitle">Code-Anfrage</h2>
+      <p id="pairModalBody">Jemand möchte einen Raumcode teilen.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" id="pairApproveBtn">Annehmen</button>
+        <button type="button" class="btn ghost" id="pairDenyBtn">Ablehnen</button>
+      </div>
+    </div>
 
     <section class="session hidden" id="sessionPanel">
       <div class="you-row">
