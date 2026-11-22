@@ -51,6 +51,7 @@ const els = {
   leaveTalkBtn: $('leaveTalkBtn'),
   leaveRoomBtn: $('leaveRoomBtn'),
   talkHint: $('talkHint'),
+  sessionGuide: $('sessionGuide'),
 };
 
 const PEER_OPTS = {
@@ -1239,6 +1240,10 @@ async function join() {
     els.youName.textContent = name;
     els.roomLabel.textContent = roomCode;
     els.modeChip.textContent = state.mode === 'group' ? 'Gruppe' : '1:1';
+    els.sessionGuide.textContent =
+      state.mode === 'group'
+        ? 'Taste halten zum Speeken — alle im Raum hören mit.'
+        : 'Partner antippen, dann Taste halten zum Speeken.';
     setStatus(state.isHost ? 'Host' : 'Online');
 
     els.lobbyJoinPanel.classList.add('hidden');

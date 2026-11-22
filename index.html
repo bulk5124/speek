@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light" />
-  <meta name="description" content="Speek — Lobby Online und Push-to-Talk." />
+  <meta name="description" content="Speek — Lobby Online und Push-to-Talk per Raumcode." />
   <title>Speek</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,6 +19,7 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <h1>Speek</h1>
     </div>
+    <p class="tagline">Lobby Online sehen — dann Raumcode teilen und speeken.</p>
   </header>
 
   <main>
@@ -27,17 +28,18 @@
       <div id="lobbySlot" class="ext-slot" hidden></div>
 
       <label class="field">
-        <span>Name</span>
-        <input id="nameInput" type="text" maxlength="40" autocomplete="nickname" placeholder="Name" />
+        <span>Dein Name</span>
+        <input id="nameInput" type="text" maxlength="40" autocomplete="nickname" placeholder="z.&nbsp;B. Markus" />
       </label>
 
       <label class="field">
         <span>Firma / Space <em class="optional">(optional)</em></span>
         <input id="spaceInput" type="text" maxlength="32" autocomplete="organization" placeholder="firm" spellcheck="false" />
+        <span class="field-hint">Gleicher Space = gleiche Online-Liste (Standard: firm).</span>
       </label>
 
       <button type="button" class="btn primary" id="enterLobbyBtn">Lobby betreten</button>
-      <p class="hint" id="lobbyJoinHint">Gleicher Space = gleiche Online-Liste.</p>
+      <p class="hint" id="lobbyJoinHint">Online ohne Raumcode — Code brauchst du erst zum Speeken.</p>
 
       <details class="room-details" id="roomJoinDetails">
         <summary>Mit Raumcode speeken</summary>
@@ -48,6 +50,7 @@
               <input id="roomInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="KATZE7" inputmode="text" />
               <button type="button" class="btn secondary" id="genRoomBtn" title="Neuen Code erzeugen">Neu</button>
             </div>
+            <span class="field-hint">Gleichen Code an Partner:innen schicken (Neu = frischer Code).</span>
           </label>
 
           <!-- Hook for pairing/QR UI. Keep id stable. -->
@@ -57,11 +60,17 @@
             <legend>Modus</legend>
             <label class="mode-option">
               <input type="radio" name="mode" value="one" checked />
-              <span><strong>1:1</strong></span>
+              <span>
+                <strong>1:1</strong>
+                <small>Partner wählen</small>
+              </span>
             </label>
             <label class="mode-option">
               <input type="radio" name="mode" value="group" />
-              <span><strong>Gruppe</strong></span>
+              <span>
+                <strong>Gruppe</strong>
+                <small>Alle im Raum</small>
+              </span>
             </label>
           </fieldset>
 
@@ -108,23 +117,26 @@
         <p class="status-pill" id="connStatus">Verbinde…</p>
       </div>
 
+      <p class="session-guide" id="sessionGuide">Partner antippen, dann Taste halten.</p>
+
       <div class="peers-head">
         <h2 id="peersHeading">Im Raum</h2>
         <span class="count" id="peerCount">0</span>
       </div>
       <ul class="peer-list" id="peerList"></ul>
-      <p class="empty" id="emptyPeers">Warte auf andere…</p>
+      <p class="empty" id="emptyPeers">Gleichen Code auf anderem Gerät öffnen.</p>
 
       <div class="talk-dock hidden" id="talkDock">
         <p class="talk-target" id="talkTarget">Bereit</p>
         <button type="button" class="ptt" id="pttBtn" aria-pressed="false">
           <span class="ptt-label">Halten &amp; speeken</span>
+          <span class="ptt-sub">Leertaste / Finger halten</span>
         </button>
         <button type="button" class="btn ghost" id="leaveTalkBtn">Zurück</button>
         <p class="talk-hint" id="talkHint"></p>
       </div>
 
-      <button type="button" class="btn ghost leave-room" id="leaveRoomBtn">Verlassen</button>
+      <button type="button" class="btn ghost leave-room" id="leaveRoomBtn">Raum verlassen</button>
     </section>
   </main>
 
