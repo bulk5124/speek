@@ -987,23 +987,47 @@ function bindPtt() {
   window.addEventListener('blur', () => setPtt(false));
 }
 
-function waitPeerOpen(peer) {
+function destroyPeerQuiet(peer) {
+  if (!peer) return;
+  try {
+    peer.destroy();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Wait until PeerJS `open`, or reject on error / timeout (avoids stuck „Verbinde…“). */
+function waitPeerOpen(peer, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
     const onOpen = (id) => {
-      cleanup();
-      resolve(id);
+      finish(() => resolve(id));
     };
     const onError = (err) => {
-      cleanup();
-      reject(err);
+      finish(() => reject(err));
     };
-    const cleanup = () => {
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      if (timer != null) clearTimeout(timer);
       peer.off('open', onOpen);
       peer.off('error', onError);
+      fn();
     };
+    timer = setTimeout(() => {
+      const err = new Error('PeerJS Timeout — erneut versuchen.');
+      err.type = 'timeout';
+      finish(() => reject(err));
+    }, timeoutMs);
     peer.on('open', onOpen);
     peer.on('error', onError);
   });
+}
+
+function setEnterLobbyBtn(label, disabled = false) {
+  els.enterLobbyBtn.disabled = disabled;
+  els.enterLobbyBtn.textContent = label;
 }
 
 async function createAsHostOrGuest(roomCode) {
@@ -1054,52 +1078,70 @@ async function createAsHostOrGuest(roomCode) {
   });
 }
 
+async function claimLobbyHost(hostId) {
+  const hostTry = new Peer(hostId, PEER_OPTS);
+  try {
+    const id = await waitPeerOpen(hostTry, 10000);
+    lobby.peer = hostTry;
+    lobby.selfId = id;
+    lobby.isHost = true;
+    return true;
+  } catch (err) {
+    destroyPeerQuiet(hostTry);
+    if (
+      err &&
+      err.type &&
+      err.type !== 'unavailable-id' &&
+      err.type !== 'peer-unavailable' &&
+      err.type !== 'timeout'
+    ) {
+      console.warn('Lobby host claim failed, joining as guest', err.type || err);
+    }
+    return false;
+  }
+}
+
 async function createLobbyHostOrGuest() {
   const hostId = lobbyPeerId();
   lobby.hostId = hostId;
   lobby.spaceId = SHARED_LOBBY_ID;
 
-  const hostTry = new Peer(hostId, PEER_OPTS);
-  try {
-    const id = await waitPeerOpen(hostTry);
-    lobby.peer = hostTry;
-    lobby.selfId = id;
-    lobby.isHost = true;
-    return;
-  } catch (err) {
-    try {
-      hostTry.destroy();
-    } catch {
-      /* ignore */
-    }
-    if (err && err.type && err.type !== 'unavailable-id' && err.type !== 'peer-unavailable') {
-      console.warn('Lobby host claim failed, joining as guest', err.type || err);
-    }
-  }
+  if (await claimLobbyHost(hostId)) return;
 
   const guest = new Peer(PEER_OPTS);
-  const id = await waitPeerOpen(guest);
-  lobby.peer = guest;
-  lobby.selfId = id;
-  lobby.isHost = false;
+  try {
+    const id = await waitPeerOpen(guest, 10000);
+    lobby.peer = guest;
+    lobby.selfId = id;
+    lobby.isHost = false;
 
-  const conn = guest.connect(hostId, { reliable: true });
-  attachLobbyDataConn(conn, hostId);
+    const conn = guest.connect(hostId, { reliable: true });
+    attachLobbyDataConn(conn, hostId);
 
-  await new Promise((resolve, reject) => {
-    const t = setTimeout(
-      () => reject(new Error('Lobby nicht erreichbar. Seite neu laden und erneut versuchen.')),
-      12000
-    );
-    conn.on('open', () => {
-      clearTimeout(t);
-      resolve();
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(
+        () => reject(new Error('Lobby nicht erreichbar. Seite neu laden und erneut versuchen.')),
+        12000
+      );
+      conn.on('open', () => {
+        clearTimeout(t);
+        resolve();
+      });
+      conn.on('error', (e) => {
+        clearTimeout(t);
+        reject(e);
+      });
     });
-    conn.on('error', (e) => {
-      clearTimeout(t);
-      reject(e);
-    });
-  });
+  } catch (err) {
+    // Guest path failed (zombie hub / flaky PeerJS): drop guest and try to reclaim host id.
+    destroyPeerQuiet(guest);
+    lobby.peer = null;
+    lobby.selfId = null;
+    lobby.isHost = false;
+    lobby.dataCons.clear();
+    if (await claimLobbyHost(hostId)) return;
+    throw err;
+  }
 }
 
 function wirePeerEvents() {
@@ -1228,8 +1270,7 @@ async function enterLobby() {
   state.displayName = name;
   saveName(name);
 
-  els.enterLobbyBtn.disabled = true;
-  els.enterLobbyBtn.textContent = 'Verbinde…';
+  setEnterLobbyBtn('Verbinde…', true);
   els.lobbyJoinHint.classList.remove('warn');
   els.lobbyJoinHint.textContent = 'Lobby über PeerJS…';
 
@@ -1243,12 +1284,13 @@ async function enterLobby() {
 
     els.lobbyJoinPanel.classList.add('hidden');
     els.lobbyPanel.classList.remove('hidden');
+    // Keep button usable when join panel is shown again (Raumcode / Zurück zur Lobby).
+    setEnterLobbyBtn('Lobby betreten', false);
     renderLobbyPeers();
   } catch (err) {
     console.error(err);
     cleanupLobby();
-    els.enterLobbyBtn.disabled = false;
-    els.enterLobbyBtn.textContent = 'Lobby betreten';
+    setEnterLobbyBtn('Lobby betreten', false);
     els.lobbyJoinHint.textContent = `Lobby fehlgeschlagen: ${err.message || err}`;
     els.lobbyJoinHint.classList.add('warn');
   }
@@ -1409,9 +1451,11 @@ function leaveRoom() {
 
   if (lobby.selfId && lobby.peer) {
     els.lobbyPanel.classList.remove('hidden');
+    setEnterLobbyBtn('Lobby betreten', false);
     setLobbyStatus(lobby.isHost ? 'Online · Lobby-Host' : 'Online');
   } else {
     els.lobbyJoinPanel.classList.remove('hidden');
+    setEnterLobbyBtn('Lobby betreten', false);
   }
 }
 
@@ -1451,8 +1495,7 @@ function leaveLobby() {
   els.lobbyPanel.classList.add('hidden');
   els.sessionPanel.classList.add('hidden');
   els.lobbyJoinPanel.classList.remove('hidden');
-  els.enterLobbyBtn.disabled = false;
-  els.enterLobbyBtn.textContent = 'Lobby betreten';
+  setEnterLobbyBtn('Lobby betreten', false);
   els.lobbyJoinHint.textContent =
     'Name → Online-Liste → „Code anfragen“ oder Raumcode zum Speeken.';
   els.lobbyJoinHint.classList.remove('warn');
@@ -1464,10 +1507,12 @@ function showRoomJoinFromLobby() {
   els.lobbyJoinPanel.classList.remove('hidden');
   if (els.roomJoinDetails) els.roomJoinDetails.open = true;
   if (lobby.selfId) {
-    els.enterLobbyBtn.textContent = 'Zurück zur Lobby';
+    setEnterLobbyBtn('Zurück zur Lobby', false);
     els.lobbyJoinHint.textContent =
       'Du bleibst online in der Lobby. Raumcode eingeben zum Speeken — oder zurück zur Online-Liste.';
     els.lobbyJoinHint.classList.remove('warn');
+  } else {
+    setEnterLobbyBtn('Lobby betreten', false);
   }
   els.roomInput.focus();
 }
@@ -1479,7 +1524,7 @@ function returnToLobbyUi() {
   }
   els.lobbyJoinPanel.classList.add('hidden');
   els.lobbyPanel.classList.remove('hidden');
-  els.enterLobbyBtn.textContent = 'Lobby betreten';
+  setEnterLobbyBtn('Lobby betreten', false);
   setLobbyStatus(lobby.isHost ? 'Online · Lobby-Host' : 'Online');
   renderLobbyPeers();
 }
@@ -1501,6 +1546,12 @@ function boot() {
     els.lobbyJoinHint.textContent = 'Kein Secure Context — HTTPS nutzen.';
     els.lobbyJoinHint.classList.add('warn');
   }
+
+  // Release PeerJS hub id on tab close so the next visitor can claim speeklobbydefault.
+  window.addEventListener('pagehide', () => {
+    destroyPeerQuiet(lobby.peer);
+    destroyPeerQuiet(state.peer);
+  });
 
   bindPtt();
   initPairing();
