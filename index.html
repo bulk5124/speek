@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light" />
-  <meta name="description" content="Speek — Push-to-Talk per Raumcode, Ende-zu-Ende verschlüsselt über WebRTC." />
+  <meta name="description" content="Speek — Firm-Lobby-Anwesenheit und Push-to-Talk per Raumcode, Ende-zu-Ende verschlüsselt über WebRTC." />
   <title>Speek</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,7 +19,7 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <h1>Speek</h1>
     </div>
-    <p class="tagline">Gleicher Link · Raumcode · Drücken &amp; speeken</p>
+    <p class="tagline">Firmen-Space · Online sehen · Dann speeken</p>
     <p class="encrypt-banner" role="note">
       Stimme ist <strong>Ende-zu-Ende verschlüsselt</strong> (WebRTC DTLS-SRTP), Peer-to-Peer.
       Signaling tauscht nur SDP/ICE und Anwesenheit — kein Sprachinhalt.
@@ -27,44 +27,84 @@
   </header>
 
   <main>
-    <section class="join-panel" id="joinPanel">
+    <section class="join-panel" id="lobbyJoinPanel">
       <label class="field">
         <span>Dein Name</span>
-        <input id="nameInput" type="text" maxlength="40" autocomplete="nickname" placeholder="z.&nbsp;B. Küche / Markus" />
+        <input id="nameInput" type="text" maxlength="40" autocomplete="nickname" placeholder="z.&nbsp;B. Markus" />
       </label>
 
       <label class="field">
-        <span>Raumcode</span>
-        <div class="room-row">
-          <input id="roomInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="z.&nbsp;B. KATZE7" inputmode="text" />
-          <button type="button" class="btn secondary" id="genRoomBtn" title="Neuen Code erzeugen">Neu</button>
-        </div>
+        <span>Firma / Space <em class="optional">(optional)</em></span>
+        <input id="spaceInput" type="text" maxlength="32" autocomplete="organization" placeholder="firm" spellcheck="false" />
       </label>
 
-      <fieldset class="mode-field">
-        <legend>Modus</legend>
-        <label class="mode-option">
-          <input type="radio" name="mode" value="one" checked />
-          <span>
-            <strong>1:1</strong>
-            <small>Einen Partner im Raum wählen — nur der hört dich</small>
-          </span>
-        </label>
-        <label class="mode-option">
-          <input type="radio" name="mode" value="group" />
-          <span>
-            <strong>Gruppe</strong>
-            <small>PTT an alle, die gerade im Raum sind</small>
-          </span>
-        </label>
-      </fieldset>
+      <button type="button" class="btn primary" id="enterLobbyBtn">Lobby betreten</button>
+      <p class="hint" id="lobbyJoinHint">Gleicher Space = gleiche Online-Liste. Raumcode brauchst du erst zum Speeken.</p>
 
-      <button type="button" class="btn primary" id="joinBtn">Mikrofon &amp; Raum beitreten</button>
-      <p class="hint" id="joinHint">Teile den Raumcode nur mit Personen, die mitreden sollen.</p>
-      <p class="security-note">
-        <strong>Sicherheit:</strong> Wer den Raumcode kennt, kann beitreten.
-        Code geheim halten, nach der Session neu erzeugen, nicht öffentlich posten.
-      </p>
+      <details class="room-details" id="roomJoinDetails">
+        <summary>Mit Raumcode speeken</summary>
+        <div class="room-details-body" id="joinPanel">
+          <label class="field">
+            <span>Raumcode</span>
+            <div class="room-row">
+              <input id="roomInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" placeholder="z.&nbsp;B. KATZE7" inputmode="text" />
+              <button type="button" class="btn secondary" id="genRoomBtn" title="Neuen Code erzeugen">Neu</button>
+            </div>
+          </label>
+
+          <fieldset class="mode-field">
+            <legend>Modus</legend>
+            <label class="mode-option">
+              <input type="radio" name="mode" value="one" checked />
+              <span>
+                <strong>1:1</strong>
+                <small>Einen Partner im Raum wählen — nur der hört dich</small>
+              </span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="mode" value="group" />
+              <span>
+                <strong>Gruppe</strong>
+                <small>PTT an alle, die gerade im Raum sind</small>
+              </span>
+            </label>
+          </fieldset>
+
+          <button type="button" class="btn primary" id="joinBtn">Mikrofon &amp; Raum beitreten</button>
+          <p class="hint" id="joinHint">Teile den Raumcode nur mit Personen, die mitreden sollen.</p>
+          <p class="security-note">
+            <strong>Sicherheit:</strong> Wer den Raumcode kennt, kann beitreten.
+            Code geheim halten, nach der Session neu erzeugen, nicht öffentlich posten.
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <section class="session hidden" id="lobbyPanel">
+      <div class="you-row">
+        <div>
+          <p class="eyebrow">Du · Space <span id="spaceLabel">—</span></p>
+          <p class="you-name" id="lobbyYouName">—</p>
+        </div>
+        <p class="status-pill" id="lobbyStatus">Verbinde…</p>
+      </div>
+
+      <div class="peers-head">
+        <h2 id="lobbyHeading">Online</h2>
+        <span class="count" id="lobbyPeerCount">0</span>
+      </div>
+      <ul class="peer-list lobby-list" id="lobbyPeerList"></ul>
+      <p class="empty" id="emptyLobby">Noch niemand sonst in diesem Space. Kolleg:innen denselben Space-Namen nennen lassen.</p>
+
+      <details class="room-details room-from-lobby" id="lobbyRoomDetails">
+        <summary>Mit Raumcode speeken</summary>
+        <div class="room-details-body">
+          <p class="hint lobby-room-copy">Raumcode teilen — oder später über „Code anfragen“ (folgt).</p>
+          <button type="button" class="btn secondary" id="openRoomFromLobbyBtn">Raumcode eingeben</button>
+        </div>
+      </details>
+
+      <button type="button" class="btn ghost leave-room" id="leaveLobbyBtn">Lobby verlassen</button>
     </section>
 
     <section class="session hidden" id="sessionPanel">

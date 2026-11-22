@@ -147,6 +147,82 @@ main,
   color: var(--ink-soft);
 }
 
+.field .optional {
+  font-style: normal;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.room-details {
+  margin-top: 1.15rem;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  padding: 0.35rem 0.85rem 0.85rem;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.room-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  padding: 0.55rem 0.1rem;
+  list-style: none;
+}
+
+.room-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.room-details > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.45rem;
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+
+.room-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.room-details-body {
+  padding-top: 0.35rem;
+}
+
+.lobby-room-copy {
+  margin: 0 0 0.75rem;
+}
+
+.lobby-list li {
+  cursor: default;
+}
+
+.lobby-list li .peer-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.lobby-list li .peer-status.busy {
+  color: var(--accent-hot);
+}
+
+.peer-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.5rem;
+}
+
+#spaceInput {
+  letter-spacing: 0.02em;
+}
+
 .room-row {
   display: grid;
   grid-template-columns: 1fr auto;

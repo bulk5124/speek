@@ -1,6 +1,6 @@
 # Speek (hosted)
 
-Browser-only Push-to-Talk: **gleichen Link** auf PC und Handy öffnen, **Raumcode** eingeben, speeken.
+Browser-only Push-to-Talk: **gleichen Link** öffnen, optional **Firmen-Space** betreten (Online-Liste), dann **Raumcode** zum Speeken.
 
 Kein Node auf dem Gerät · kein lokales WLAN nötig · keine Firewall-Freigabe.
 
@@ -9,12 +9,10 @@ Kein Node auf dem Gerät · kein lokales WLAN nötig · keine Firewall-Freigabe.
 ## START (30 Sekunden)
 
 1. Gehostete HTTPS-URL öffnen (Cursor Publish oder lokaler Testserver).
-2. Namen tippen.
-3. **Raumcode** eingeben oder **Neu** erzeugen — denselben Code an die anderen geben.
-4. Modus wählen:
-   - **1:1** — Partner in der Liste antippen, dann Taste halten
-   - **Gruppe** — Taste halten → alle im Raum hören
-5. Mikrofon erlauben → **Halten & speeken** (oder **Leertaste**).
+2. Namen tippen, optional **Firma / Space** (Standard `firm`) → **Lobby betreten**.
+3. Unter **Online** siehst du andere im Space — **ohne Raumcode**.
+4. Zum Speeken: **Mit Raumcode speeken** / **Raumcode eingeben**, Code teilen oder erzeugen.
+5. Modus **1:1** oder **Gruppe** → Mikrofon → **Halten & speeken** (oder **Leertaste**).
 
 Ausführlich: [`START.md`](./START.md)
 
@@ -35,10 +33,12 @@ Ausführlich: [`START.md`](./START.md)
 ## Technik
 
 - **Frontend:** statisches HTML/CSS/JS
-- **Signaling / Presence:** PeerJS Cloud (`0.peerjs.com`) — Raum-Host-Peer-ID aus dem Raumcode
-- **Medien:** WebRTC `MediaConnection` (Audio-Tracks), PTT via `MediaStreamTrack.enabled`
+- **Firm-Lobby:** PeerJS-Hub-ID `speeklobby{space}` (Space normalisiert, Default `firm`) — Online-Liste + Status
+- **Signaling / Room presence:** PeerJS Cloud (`0.peerjs.com`) — Raum-Host-Peer-ID `scv1{code}`
+- **Medien:** WebRTC `MediaConnection` (Audio-Tracks), PTT via `MediaStreamTrack.enabled` (unverändert)
 - **1:1:** eine Medienverbindung zum gewählten Peer
 - **Gruppe:** Mesh zwischen Teilnehmern im Raum (kleine Gruppen)
+- **Pairing-Hooks:** `window.__speek.lobby` + Events `speek:lobby-peer-actions` / `speek:lobby-peers-changed` (Slot `.peer-actions` für „Code anfragen“)
 
 Optionaler **lokaler** LAN-Pfad bleibt unter `apps/lan-ptt/` (eigener Node-Server) — nicht Teil dieses Hosted-Flows.
 
@@ -55,11 +55,12 @@ python3 -m http.server 8765 --bind 127.0.0.1
 
 Zwei Browserfenster / ein Inkognito-Fenster: gleicher Raumcode → Peer-Liste prüfen.
 
-Automatischer Signaling-Test (Playwright):
+Automatische Signaling-Tests (Playwright):
 
 ```bash
 npm install
 npm run test:join
+npm run test:lobby
 ```
 
 ---
