@@ -5,7 +5,8 @@
   "description": "Speek — hosted room-code push-to-talk via PeerJS + WebRTC",
   "scripts": {
     "start": "python3 -m http.server 8765 --bind 127.0.0.1",
-    "test:join": "node scripts/test-join.mjs"
+    "test:join": "node scripts/test-join.mjs",
+    "test:lobby": "node scripts/test-lobby.mjs"
   },
   "devDependencies": {
     "playwright": "^1.49.1"

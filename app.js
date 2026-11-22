@@ -1,15 +1,38 @@
 /**
- * Speek hosted — room-code PTT over PeerJS cloud + WebRTC media (DTLS-SRTP).
- * Presence/signaling via PeerJS DataConnections; voice is peer-to-peer MediaConnections.
- * PeerJS host-ID prefix `scv1` is protocol-stable — keep for room compatibility.
+ * Speek hosted — firm lobby presence + room-code PTT over PeerJS cloud + WebRTC media (DTLS-SRTP).
+ * Lobby: well-known PeerJS id `speek-lobby-<space>` for Online list (no room code yet).
+ * Voice: PeerJS DataConnections for presence; MediaConnections for P2P audio.
+ * PeerJS room host-ID prefix `scv1` is protocol-stable — keep for room compatibility.
+ *
+ * Pairing hooks (for follow-up PR "Code anfragen"):
+ * - CustomEvent `speek:lobby-peer-actions` — detail: { peer, actionsEl, spaceId }
+ * - CustomEvent `speek:lobby-peers-changed` — detail: { peers, spaceId, self }
+ * - window.__speek.lobby — getPeers / getSelf / getSpaceId / on / off
+ * - each lobby row: .peer-actions container + data-peer-id
  */
 
 const $ = (id) => document.getElementById(id);
 
 const els = {
+  lobbyJoinPanel: $('lobbyJoinPanel'),
+  lobbyPanel: $('lobbyPanel'),
   joinPanel: $('joinPanel'),
   sessionPanel: $('sessionPanel'),
   nameInput: $('nameInput'),
+  spaceInput: $('spaceInput'),
+  enterLobbyBtn: $('enterLobbyBtn'),
+  lobbyJoinHint: $('lobbyJoinHint'),
+  spaceLabel: $('spaceLabel'),
+  lobbyYouName: $('lobbyYouName'),
+  lobbyStatus: $('lobbyStatus'),
+  lobbyHeading: $('lobbyHeading'),
+  lobbyPeerCount: $('lobbyPeerCount'),
+  lobbyPeerList: $('lobbyPeerList'),
+  emptyLobby: $('emptyLobby'),
+  leaveLobbyBtn: $('leaveLobbyBtn'),
+  roomJoinDetails: $('roomJoinDetails'),
+  lobbyRoomDetails: $('lobbyRoomDetails'),
+  openRoomFromLobbyBtn: $('openRoomFromLobbyBtn'),
   roomInput: $('roomInput'),
   genRoomBtn: $('genRoomBtn'),
   joinBtn: $('joinBtn'),
@@ -47,6 +70,8 @@ const PEER_OPTS = {
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const AVATAR_COLORS = ['#0b6e6e', '#2a5f8f', '#8a4b2a', '#5a4a8f', '#2f6b6b', '#6b3a4a'];
+const DEFAULT_SPACE = 'firm';
+const LOBBY_HEARTBEAT_MS = 12000;
 
 const state = {
   mode: 'one', // 'one' | 'group'
@@ -71,11 +96,43 @@ const state = {
   destroyed: false,
 };
 
+/** Firm lobby presence (separate PeerJS session from voice rooms). */
+const lobby = {
+  spaceId: '',
+  displayName: '',
+  peer: null,
+  selfId: null,
+  isHost: false,
+  hostId: '',
+  /** @type {Map<string, {id:string,name:string,device:string,status:string,updatedAt:number}>} */
+  peers: new Map(),
+  /** @type {Map<string, import('peerjs').DataConnection>} */
+  dataCons: new Map(),
+  heartbeatTimer: null,
+  destroyed: false,
+  /** @type {'online'|'busy'} */
+  status: 'online',
+};
+
+/** @type {Map<string, Set<Function>>} */
+const lobbyListeners = new Map();
+
 function normalizeRoom(raw) {
   return String(raw || '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, 8);
+}
+
+function normalizeSpace(raw) {
+  const cleaned = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 32);
+  return cleaned || DEFAULT_SPACE;
 }
 
 function generateRoomCode() {
@@ -88,6 +145,12 @@ function generateRoomCode() {
 function hostPeerId(roomCode) {
   // PeerJS IDs: keep alphanumeric; prefix avoids collisions with other apps.
   return `scv1${roomCode.toLowerCase()}`;
+}
+
+/** Well-known lobby hub id derived from firm space (PeerJS alphanumeric-safe). */
+function lobbyPeerId(spaceId) {
+  const space = normalizeSpace(spaceId).replace(/-/g, '');
+  return `speeklobby${space}`;
 }
 
 function deviceLabel() {
@@ -128,6 +191,11 @@ function setStatus(text, bad = false) {
   els.connStatus.classList.toggle('bad', bad);
 }
 
+function setLobbyStatus(text, bad = false) {
+  els.lobbyStatus.textContent = text;
+  els.lobbyStatus.classList.toggle('bad', bad);
+}
+
 function savedName() {
   try {
     return localStorage.getItem('speek-name') || localStorage.getItem('speedchat-name') || '';
@@ -155,6 +223,22 @@ function savedRoom() {
 function saveRoom(code) {
   try {
     localStorage.setItem('speek-room', code);
+  } catch {
+    /* ignore */
+  }
+}
+
+function savedSpace() {
+  try {
+    return localStorage.getItem('speek-space') || '';
+  } catch {
+    return '';
+  }
+}
+
+function saveSpace(spaceId) {
+  try {
+    localStorage.setItem('speek-space', spaceId);
   } catch {
     /* ignore */
   }
@@ -197,6 +281,40 @@ function selfMeta() {
   };
 }
 
+function lobbySelfMeta() {
+  return {
+    id: lobby.selfId,
+    name: lobby.displayName,
+    device: deviceLabel(),
+    status: lobby.status,
+  };
+}
+
+function statusLabel(status) {
+  return status === 'busy' ? 'Im Gespräch' : 'Online';
+}
+
+function emitLobby(eventName, detail) {
+  const handlers = lobbyListeners.get(eventName);
+  if (handlers) {
+    for (const fn of handlers) {
+      try {
+        fn(detail);
+      } catch (err) {
+        console.warn('lobby listener error', err);
+      }
+    }
+  }
+  document.dispatchEvent(new CustomEvent(`speek:${eventName}`, { detail }));
+}
+
+function onLobbyEvent(eventName, handler) {
+  if (typeof handler !== 'function') return () => {};
+  if (!lobbyListeners.has(eventName)) lobbyListeners.set(eventName, new Set());
+  lobbyListeners.get(eventName).add(handler);
+  return () => lobbyListeners.get(eventName)?.delete(handler);
+}
+
 function broadcast(msg, exceptId = null) {
   const raw = JSON.stringify(msg);
   for (const [id, conn] of state.dataCons) {
@@ -207,6 +325,19 @@ function broadcast(msg, exceptId = null) {
 
 function sendTo(peerId, msg) {
   const conn = state.dataCons.get(peerId);
+  if (conn && conn.open) conn.send(JSON.stringify(msg));
+}
+
+function lobbyBroadcast(msg, exceptId = null) {
+  const raw = JSON.stringify(msg);
+  for (const [id, conn] of lobby.dataCons) {
+    if (exceptId && id === exceptId) continue;
+    if (conn.open) conn.send(raw);
+  }
+}
+
+function lobbySendTo(peerId, msg) {
+  const conn = lobby.dataCons.get(peerId);
   if (conn && conn.open) conn.send(JSON.stringify(msg));
 }
 
@@ -235,6 +366,36 @@ function attachDataConn(conn, remoteHintId) {
 
   conn.on('close', () => {
     onPeerGone(conn.peer);
+  });
+
+  conn.on('error', () => {
+    /* closed elsewhere */
+  });
+}
+
+function attachLobbyDataConn(conn, remoteHintId) {
+  const peerId = conn.peer || remoteHintId;
+  lobby.dataCons.set(peerId, conn);
+
+  conn.on('open', () => {
+    conn.send(JSON.stringify({ type: 'lobby-hello', peer: lobbySelfMeta() }));
+    if (lobby.isHost) pushLobbyPeerList();
+  });
+
+  conn.on('data', (data) => {
+    let msg = data;
+    if (typeof data === 'string') {
+      try {
+        msg = JSON.parse(data);
+      } catch {
+        return;
+      }
+    }
+    onLobbyPresence(msg, conn.peer);
+  });
+
+  conn.on('close', () => {
+    onLobbyPeerGone(conn.peer);
   });
 
   conn.on('error', () => {
@@ -307,6 +468,61 @@ function onPresence(msg, fromId) {
   }
 }
 
+function onLobbyPresence(msg, fromId) {
+  if (!msg || !msg.type) return;
+
+  switch (msg.type) {
+    case 'lobby-hello':
+    case 'lobby-ping': {
+      if (msg.peer && msg.peer.id && msg.peer.id !== lobby.selfId) {
+        lobby.peers.set(msg.peer.id, {
+          id: msg.peer.id,
+          name: msg.peer.name || 'Gast',
+          device: msg.peer.device || 'Browser',
+          status: msg.peer.status === 'busy' ? 'busy' : 'online',
+          updatedAt: Date.now(),
+        });
+        renderLobbyPeers();
+        if (lobby.isHost) pushLobbyPeerList();
+      }
+      break;
+    }
+    case 'lobby-peers': {
+      if (!Array.isArray(msg.peers)) break;
+      const next = new Map();
+      for (const p of msg.peers) {
+        if (!p || !p.id || p.id === lobby.selfId) continue;
+        next.set(p.id, {
+          id: p.id,
+          name: p.name || 'Gast',
+          device: p.device || 'Browser',
+          status: p.status === 'busy' ? 'busy' : 'online',
+          updatedAt: Date.now(),
+        });
+        ensureLobbyDataTo(p.id);
+      }
+      lobby.peers = next;
+      renderLobbyPeers();
+      break;
+    }
+    case 'lobby-peer-left': {
+      if (msg.id) onLobbyPeerGone(msg.id);
+      break;
+    }
+    case 'lobby-relay': {
+      if (lobby.isHost && msg.payload) {
+        lobbyBroadcast({ ...msg.payload, _via: fromId }, fromId);
+        if (msg.payload.type === 'lobby-hello' || msg.payload.type === 'lobby-ping') {
+          onLobbyPresence(msg.payload, fromId);
+        }
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 function pushPeerList() {
   if (!state.isHost) return;
   const peers = [selfMeta(), ...state.peers.values()].map(({ id, name, device }) => ({
@@ -315,6 +531,17 @@ function pushPeerList() {
     device,
   }));
   broadcast({ type: 'peers', peers });
+}
+
+function pushLobbyPeerList() {
+  if (!lobby.isHost) return;
+  const peers = [lobbySelfMeta(), ...lobby.peers.values()].map(({ id, name, device, status }) => ({
+    id,
+    name,
+    device,
+    status: status === 'busy' ? 'busy' : 'online',
+  }));
+  lobbyBroadcast({ type: 'lobby-peers', peers });
 }
 
 function ensureDataTo(peerId) {
@@ -331,6 +558,18 @@ function ensureDataTo(peerId) {
   }
   if (!state.isHost && peerId === state.hostId) {
     // already connected on join
+    return;
+  }
+}
+
+function ensureLobbyDataTo(peerId) {
+  if (!lobby.peer || peerId === lobby.selfId) return;
+  if (lobby.dataCons.has(peerId)) return;
+  if (!lobby.isHost && peerId !== lobby.hostId) {
+    if (lobby.selfId < peerId) {
+      const conn = lobby.peer.connect(peerId, { reliable: true });
+      attachLobbyDataConn(conn, peerId);
+    }
     return;
   }
 }
@@ -353,6 +592,25 @@ function onPeerGone(peerId) {
   if (state.isHost) {
     broadcast({ type: 'peer-left', id: peerId });
     pushPeerList();
+  }
+}
+
+function onLobbyPeerGone(peerId) {
+  if (!peerId) return;
+  lobby.peers.delete(peerId);
+  const conn = lobby.dataCons.get(peerId);
+  if (conn) {
+    try {
+      conn.close();
+    } catch {
+      /* ignore */
+    }
+    lobby.dataCons.delete(peerId);
+  }
+  renderLobbyPeers();
+  if (lobby.isHost) {
+    lobbyBroadcast({ type: 'lobby-peer-left', id: peerId });
+    pushLobbyPeerList();
   }
 }
 
@@ -490,6 +748,64 @@ function renderPeers() {
     els.talkTarget.innerHTML = `Gruppe · <strong>${peers.length}</strong>`;
     els.leaveTalkBtn.classList.add('hidden');
   }
+}
+
+function renderLobbyPeers() {
+  const peers = [...lobby.peers.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  els.lobbyPeerCount.textContent = String(peers.length);
+  els.emptyLobby.classList.toggle('hidden', peers.length > 0);
+  els.lobbyPeerList.innerHTML = '';
+
+  for (const peer of peers) {
+    const li = document.createElement('li');
+    li.classList.add('readonly');
+    li.dataset.peerId = peer.id;
+    li.dataset.status = peer.status || 'online';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.style.background = colorFor(peer.id);
+    avatar.textContent = initials(peer.name);
+
+    const meta = document.createElement('div');
+    meta.className = 'peer-meta';
+    meta.innerHTML = `<strong>${escapeHtml(peer.name)}</strong><span>${escapeHtml(peer.device || 'Browser')}</span>`;
+
+    const statusEl = document.createElement('span');
+    statusEl.className = `peer-status${peer.status === 'busy' ? ' busy' : ''}`;
+    statusEl.textContent = statusLabel(peer.status);
+
+    // Slot for pairing PR: inject "Code anfragen" into .peer-actions
+    const actions = document.createElement('div');
+    actions.className = 'peer-actions';
+    actions.dataset.peerId = peer.id;
+
+    li.append(avatar, meta, statusEl, actions);
+    els.lobbyPeerList.append(li);
+
+    const peerPayload = {
+      id: peer.id,
+      name: peer.name,
+      device: peer.device,
+      status: peer.status || 'online',
+    };
+    emitLobby('lobby-peer-actions', {
+      peer: peerPayload,
+      actionsEl: actions,
+      spaceId: lobby.spaceId,
+    });
+  }
+
+  emitLobby('lobby-peers-changed', {
+    peers: peers.map(({ id, name, device, status }) => ({
+      id,
+      name,
+      device,
+      status: status || 'online',
+    })),
+    spaceId: lobby.spaceId,
+    self: lobby.selfId ? lobbySelfMeta() : null,
+  });
 }
 
 async function selectPeer(peerId) {
@@ -683,6 +999,54 @@ async function createAsHostOrGuest(roomCode) {
   });
 }
 
+async function createLobbyHostOrGuest(spaceId) {
+  const hostId = lobbyPeerId(spaceId);
+  lobby.hostId = hostId;
+  lobby.spaceId = normalizeSpace(spaceId);
+
+  const hostTry = new Peer(hostId, PEER_OPTS);
+  try {
+    const id = await waitPeerOpen(hostTry);
+    lobby.peer = hostTry;
+    lobby.selfId = id;
+    lobby.isHost = true;
+    return;
+  } catch (err) {
+    try {
+      hostTry.destroy();
+    } catch {
+      /* ignore */
+    }
+    if (err && err.type && err.type !== 'unavailable-id' && err.type !== 'peer-unavailable') {
+      console.warn('Lobby host claim failed, joining as guest', err.type || err);
+    }
+  }
+
+  const guest = new Peer(PEER_OPTS);
+  const id = await waitPeerOpen(guest);
+  lobby.peer = guest;
+  lobby.selfId = id;
+  lobby.isHost = false;
+
+  const conn = guest.connect(hostId, { reliable: true });
+  attachLobbyDataConn(conn, hostId);
+
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(
+      () => reject(new Error('Lobby nicht erreichbar. Space prüfen oder Seite neu laden.')),
+      12000
+    );
+    conn.on('open', () => {
+      clearTimeout(t);
+      resolve();
+    });
+    conn.on('error', (e) => {
+      clearTimeout(t);
+      reject(e);
+    });
+  });
+}
+
 function wirePeerEvents() {
   const peer = state.peer;
   peer.on('connection', (conn) => {
@@ -724,6 +1088,121 @@ function wirePeerEvents() {
   });
 }
 
+function wireLobbyPeerEvents() {
+  const peer = lobby.peer;
+  peer.on('connection', (conn) => {
+    attachLobbyDataConn(conn, conn.peer);
+    conn.on('open', () => {
+      if (!lobby.peers.has(conn.peer)) {
+        lobby.peers.set(conn.peer, {
+          id: conn.peer,
+          name: 'Gast…',
+          device: 'Browser',
+          status: 'online',
+          updatedAt: Date.now(),
+        });
+        renderLobbyPeers();
+      }
+    });
+  });
+
+  peer.on('disconnected', () => {
+    setLobbyStatus('Getrennt — reconnect…', true);
+    try {
+      peer.reconnect();
+    } catch {
+      /* ignore */
+    }
+  });
+
+  peer.on('close', () => {
+    if (!lobby.destroyed) setLobbyStatus('Verbindung beendet', true);
+  });
+
+  peer.on('error', (err) => {
+    console.warn('lobby peer error', err);
+    if (err?.type === 'network') setLobbyStatus('Netzwerkfehler', true);
+  });
+}
+
+function startLobbyHeartbeat() {
+  stopLobbyHeartbeat();
+  lobby.heartbeatTimer = setInterval(() => {
+    if (!lobby.peer || lobby.destroyed) return;
+    const payload = { type: 'lobby-ping', peer: lobbySelfMeta() };
+    if (lobby.isHost) {
+      lobbyBroadcast(payload);
+      pushLobbyPeerList();
+    } else {
+      lobbySendTo(lobby.hostId, { type: 'lobby-relay', payload });
+      lobbyBroadcast(payload);
+    }
+  }, LOBBY_HEARTBEAT_MS);
+}
+
+function stopLobbyHeartbeat() {
+  if (lobby.heartbeatTimer) {
+    clearInterval(lobby.heartbeatTimer);
+    lobby.heartbeatTimer = null;
+  }
+}
+
+function setLobbyBusy(busy) {
+  lobby.status = busy ? 'busy' : 'online';
+  if (!lobby.peer || !lobby.selfId) return;
+  const payload = { type: 'lobby-ping', peer: lobbySelfMeta() };
+  if (lobby.isHost) {
+    lobbyBroadcast(payload);
+    pushLobbyPeerList();
+  } else {
+    lobbySendTo(lobby.hostId, { type: 'lobby-relay', payload });
+    lobbyBroadcast(payload);
+  }
+}
+
+async function enterLobby() {
+  if (!isSecureEnough()) {
+    els.lobbyJoinHint.textContent =
+      'Secure Context nötig (HTTPS oder localhost). Bitte die gehostete HTTPS-URL öffnen.';
+    els.lobbyJoinHint.classList.add('warn');
+    return;
+  }
+
+  const name = els.nameInput.value.trim() || `Gast-${Math.floor(Math.random() * 90 + 10)}`;
+  const spaceId = normalizeSpace(els.spaceInput.value);
+  els.spaceInput.value = spaceId;
+  lobby.displayName = name;
+  state.displayName = name;
+  saveName(name);
+  saveSpace(spaceId);
+
+  els.enterLobbyBtn.disabled = true;
+  els.enterLobbyBtn.textContent = 'Verbinde…';
+  els.lobbyJoinHint.classList.remove('warn');
+  els.lobbyJoinHint.textContent = 'Lobby über PeerJS…';
+
+  try {
+    await createLobbyHostOrGuest(spaceId);
+    wireLobbyPeerEvents();
+    startLobbyHeartbeat();
+
+    els.lobbyYouName.textContent = name;
+    els.spaceLabel.textContent = lobby.spaceId;
+    setLobbyStatus(lobby.isHost ? 'Online · Lobby-Host' : 'Online');
+
+    els.lobbyJoinPanel.classList.add('hidden');
+    els.lobbyPanel.classList.remove('hidden');
+    renderLobbyPeers();
+  } catch (err) {
+    console.error(err);
+    cleanupLobby();
+    els.enterLobbyBtn.disabled = false;
+    els.enterLobbyBtn.textContent = 'Lobby betreten';
+    els.lobbyJoinHint.textContent = `Lobby fehlgeschlagen: ${err.message || err}`;
+    els.lobbyJoinHint.classList.add('warn');
+  }
+}
+
 async function join() {
   if (!isSecureEnough()) {
     els.joinHint.textContent = 'Mikrofon braucht HTTPS (oder localhost).';
@@ -735,10 +1214,13 @@ async function join() {
   if (roomCode.length < 4) {
     els.joinHint.textContent = 'Raumcode: mind. 4 Zeichen.';
     els.joinHint.classList.add('warn');
+    if (els.roomJoinDetails) els.roomJoinDetails.open = true;
     return;
   }
 
-  const name = els.nameInput.value.trim() || `Gast-${Math.floor(Math.random() * 90 + 10)}`;
+  const name =
+    (els.nameInput.value.trim() || state.displayName || lobby.displayName) ||
+    `Gast-${Math.floor(Math.random() * 90 + 10)}`;
   state.displayName = name;
   state.mode = selectedMode();
   state.roomCode = roomCode;
@@ -764,7 +1246,8 @@ async function join() {
         : 'Partner antippen, dann Taste halten zum Speeken.';
     setStatus(state.isHost ? 'Host' : 'Online');
 
-    els.joinPanel.classList.add('hidden');
+    els.lobbyJoinPanel.classList.add('hidden');
+    els.lobbyPanel.classList.add('hidden');
     els.sessionPanel.classList.remove('hidden');
 
     if (state.mode === 'group') {
@@ -773,6 +1256,7 @@ async function join() {
       els.talkTarget.textContent = 'Gruppe';
     }
 
+    setLobbyBusy(true);
     renderPeers();
   } catch (err) {
     console.error(err);
@@ -781,6 +1265,7 @@ async function join() {
     els.joinBtn.textContent = 'Beitreten';
     els.joinHint.textContent = `Fehler: ${err.message || err}`;
     els.joinHint.classList.add('warn');
+    if (els.roomJoinDetails) els.roomJoinDetails.open = true;
   }
 }
 
@@ -815,52 +1300,164 @@ function cleanupSession() {
     state.localStream = null;
     state.localTrack = null;
   }
+
+  setLobbyBusy(false);
+}
+
+function cleanupLobby() {
+  lobby.destroyed = true;
+  stopLobbyHeartbeat();
+  for (const [, conn] of lobby.dataCons) {
+    try {
+      conn.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  lobby.dataCons.clear();
+  lobby.peers.clear();
+  if (lobby.peer) {
+    try {
+      lobby.peer.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  lobby.peer = null;
+  lobby.selfId = null;
+  lobby.isHost = false;
+  lobby.hostId = '';
+  lobby.status = 'online';
+  lobby.destroyed = false;
+  renderLobbyPeers();
 }
 
 function leaveRoom() {
   cleanupSession();
   els.sessionPanel.classList.add('hidden');
-  els.joinPanel.classList.remove('hidden');
   els.talkDock.classList.add('hidden');
   els.joinBtn.disabled = false;
   els.joinBtn.textContent = 'Beitreten';
   els.joinHint.textContent = '';
   els.joinHint.classList.remove('warn');
   renderPeers();
+
+  if (lobby.selfId && lobby.peer) {
+    els.lobbyPanel.classList.remove('hidden');
+    setLobbyStatus(lobby.isHost ? 'Online · Lobby-Host' : 'Online');
+  } else {
+    els.lobbyJoinPanel.classList.remove('hidden');
+  }
+}
+
+function leaveLobby() {
+  if (state.peer) cleanupSession();
+  cleanupLobby();
+  els.lobbyPanel.classList.add('hidden');
+  els.sessionPanel.classList.add('hidden');
+  els.lobbyJoinPanel.classList.remove('hidden');
+  els.enterLobbyBtn.disabled = false;
+  els.enterLobbyBtn.textContent = 'Lobby betreten';
+  els.lobbyJoinHint.textContent =
+    'Gleicher Space = gleiche Online-Liste. Raumcode brauchst du erst zum Speeken.';
+  els.lobbyJoinHint.classList.remove('warn');
+}
+
+function showRoomJoinFromLobby() {
+  // Keep lobby PeerJS session; only switch UI to room-code form.
+  els.lobbyPanel.classList.add('hidden');
+  els.lobbyJoinPanel.classList.remove('hidden');
+  if (els.roomJoinDetails) els.roomJoinDetails.open = true;
+  if (lobby.selfId) {
+    els.enterLobbyBtn.textContent = 'Zurück zur Lobby';
+    els.lobbyJoinHint.textContent =
+      'Du bleibst online im Space. Raumcode eingeben zum Speeken — oder zurück zur Online-Liste.';
+    els.lobbyJoinHint.classList.remove('warn');
+  }
+  els.roomInput.focus();
+}
+
+function returnToLobbyUi() {
+  if (!lobby.selfId || !lobby.peer) {
+    enterLobby();
+    return;
+  }
+  els.lobbyJoinPanel.classList.add('hidden');
+  els.lobbyPanel.classList.remove('hidden');
+  els.enterLobbyBtn.textContent = 'Lobby betreten';
+  setLobbyStatus(lobby.isHost ? 'Online · Lobby-Host' : 'Online');
+  renderLobbyPeers();
 }
 
 function boot() {
   if (typeof Peer === 'undefined') {
-    els.joinHint.textContent = 'PeerJS fehlt.';
-    els.joinHint.classList.add('warn');
+    els.lobbyJoinHint.textContent = 'PeerJS fehlt.';
+    els.lobbyJoinHint.classList.add('warn');
+    els.enterLobbyBtn.disabled = true;
     els.joinBtn.disabled = true;
     return;
   }
 
   els.nameInput.value = savedName();
+  els.spaceInput.value = normalizeSpace(savedSpace() || DEFAULT_SPACE);
   const room = normalizeRoom(savedRoom()) || generateRoomCode();
   els.roomInput.value = room;
 
   if (!isSecureEnough()) {
-    els.joinHint.textContent = 'Kein Secure Context — HTTPS nutzen.';
-    els.joinHint.classList.add('warn');
+    els.lobbyJoinHint.textContent = 'Kein Secure Context — HTTPS nutzen.';
+    els.lobbyJoinHint.classList.add('warn');
   }
 
   bindPtt();
   els.genRoomBtn.addEventListener('click', () => {
     els.roomInput.value = generateRoomCode();
   });
+  els.enterLobbyBtn.addEventListener('click', () => {
+    if (lobby.selfId && lobby.peer) {
+      returnToLobbyUi();
+      return;
+    }
+    enterLobby();
+  });
   els.joinBtn.addEventListener('click', join);
   els.roomInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') join();
   });
   els.nameInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') join();
+    if (e.key === 'Enter') {
+      if (lobby.selfId && lobby.peer) returnToLobbyUi();
+      else enterLobby();
+    }
+  });
+  els.spaceInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (lobby.selfId && lobby.peer) returnToLobbyUi();
+      else enterLobby();
+    }
   });
   els.leaveTalkBtn.addEventListener('click', leaveTalk);
   els.leaveRoomBtn.addEventListener('click', leaveRoom);
+  els.leaveLobbyBtn.addEventListener('click', leaveLobby);
+  els.openRoomFromLobbyBtn.addEventListener('click', showRoomJoinFromLobby);
 
-  // Expose for automated tests
+  // Expose for automated tests + pairing follow-up PR
+  const lobbyApi = {
+    getPeers: () =>
+      [...lobby.peers.values()].map(({ id, name, device, status }) => ({
+        id,
+        name,
+        device,
+        status: status || 'online',
+      })),
+    getSelf: () => (lobby.selfId ? lobbySelfMeta() : null),
+    getSpaceId: () => lobby.spaceId || null,
+    isConnected: () => !!(lobby.peer && lobby.selfId),
+    lobbyPeerId,
+    normalizeSpace,
+    on: onLobbyEvent,
+    off: (eventName, handler) => lobbyListeners.get(eventName)?.delete(handler),
+  };
+
   const testApi = {
     getState: () => ({
       selfId: state.selfId,
@@ -870,9 +1467,15 @@ function boot() {
       peerCount: state.peers.size,
       peers: [...state.peers.values()].map((p) => ({ id: p.id, name: p.name })),
       connected: !!(state.peer && state.selfId),
+      lobbyConnected: !!(lobby.peer && lobby.selfId),
+      spaceId: lobby.spaceId || null,
+      lobbyPeers: lobbyApi.getPeers(),
     }),
     normalizeRoom,
     hostPeerId,
+    lobbyPeerId,
+    normalizeSpace,
+    lobby: lobbyApi,
   };
   window.__speek = testApi;
   window.__speedchat = testApi; // legacy alias

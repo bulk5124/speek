@@ -61,6 +61,9 @@ async function joinAs(page, name) {
 
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await page.fill('#nameInput', name);
+  await page.locator('#roomJoinDetails').evaluate((el) => {
+    el.open = true;
+  });
   await page.fill('#roomInput', ROOM);
   await page.check('input[name="mode"][value="group"]');
   await page.click('#joinBtn');
