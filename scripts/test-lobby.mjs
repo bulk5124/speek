@@ -71,11 +71,14 @@ async function main() {
     await enterLobbyAs(pageA, 'Alice');
     const stateA1 = await pageA.evaluate(() => {
       const s = window.__speek.getState();
+      const btn = document.getElementById('enterLobbyBtn');
       return {
         lobbyId: s.lobbyId,
         spaceId: s.spaceId,
         lobbyConnected: s.lobbyConnected,
         hostId: window.__speek.lobbyPeerId(),
+        enterBtnDisabled: btn?.disabled === true,
+        enterBtnText: btn?.textContent || '',
       };
     });
     console.log('A lobby', stateA1);
@@ -84,6 +87,13 @@ async function main() {
     }
     if (stateA1.lobbyId !== EXPECTED_LOBBY_ID) {
       throw new Error(`Expected lobbyId ${EXPECTED_LOBBY_ID}, got ${stateA1.lobbyId}`);
+    }
+    // Regression: successful join must not leave Lobby betreten stuck disabled at „Verbinde…“.
+    if (stateA1.enterBtnDisabled) {
+      throw new Error(`enterLobbyBtn stayed disabled after join (label=${stateA1.enterBtnText})`);
+    }
+    if (/verbinde/i.test(stateA1.enterBtnText)) {
+      throw new Error(`enterLobbyBtn label stuck at connecting: ${stateA1.enterBtnText}`);
     }
 
     await enterLobbyAs(pageB, 'Bob');
@@ -122,6 +132,34 @@ async function main() {
     if (actionsSlots < 1) throw new Error('Expected .peer-actions hook slots for pairing');
     if (finalA.lobbyId !== finalB.lobbyId || finalA.lobbyId !== EXPECTED_LOBBY_ID) {
       throw new Error(`Lobby id mismatch A=${finalA.lobbyId} B=${finalB.lobbyId}`);
+    }
+
+    // Raumcode form → Zurück zur Lobby must work (native click; button must be enabled).
+    await pageA.evaluate(() => {
+      document.getElementById('lobbyRoomDetails').open = true;
+    });
+    await pageA.locator('#openRoomFromLobbyBtn').click({ force: true });
+    const roomForm = await pageA.evaluate(() => {
+      const btn = document.getElementById('enterLobbyBtn');
+      return {
+        disabled: btn?.disabled === true,
+        text: btn?.textContent || '',
+        joinHidden: document.getElementById('lobbyJoinPanel')?.classList.contains('hidden'),
+      };
+    });
+    if (roomForm.joinHidden) throw new Error('Expected join panel after Raumcode eingeben');
+    if (roomForm.disabled) {
+      throw new Error(`Zurück zur Lobby disabled (label=${roomForm.text}) — clicks do nothing`);
+    }
+    await pageA.click('#enterLobbyBtn');
+    await pageA.waitForFunction(
+      () => !document.getElementById('lobbyPanel')?.classList.contains('hidden'),
+      null,
+      { timeout: 5000 }
+    );
+    const backPeers = await pageA.evaluate(() => window.__speek.lobby.getPeers());
+    if (!backPeers.some((p) => p.name === 'Bob')) {
+      throw new Error('Expected Bob still online after Zurück zur Lobby');
     }
 
     console.log('PASS: shared lobby mutual presence', {
