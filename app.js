@@ -1,6 +1,6 @@
 /**
- * Speek hosted — firm lobby presence + room-code PTT over PeerJS cloud + WebRTC media (DTLS-SRTP).
- * Lobby: well-known PeerJS id `speeklobby{space}` for Online list (no room code yet).
+ * Speek hosted — shared global lobby + room-code PTT over PeerJS cloud + WebRTC media (DTLS-SRTP).
+ * Lobby: single well-known PeerJS id `speeklobbydefault` (everyone in one Online list).
  * Voice: PeerJS DataConnections for presence; MediaConnections for P2P audio.
  * PeerJS room host-ID prefix `scv1` is protocol-stable — keep for room compatibility.
  *
@@ -21,10 +21,8 @@ const els = {
   joinPanel: $('joinPanel'),
   sessionPanel: $('sessionPanel'),
   nameInput: $('nameInput'),
-  spaceInput: $('spaceInput'),
   enterLobbyBtn: $('enterLobbyBtn'),
   lobbyJoinHint: $('lobbyJoinHint'),
-  spaceLabel: $('spaceLabel'),
   lobbyYouName: $('lobbyYouName'),
   lobbyStatus: $('lobbyStatus'),
   lobbyHeading: $('lobbyHeading'),
@@ -78,7 +76,8 @@ const PEER_OPTS = {
 };
 
 const AVATAR_COLORS = ['#0b6e6e', '#2a5f8f', '#8a4b2a', '#5a4a8f', '#2f6b6b', '#6b3a4a'];
-const DEFAULT_SPACE = 'firm';
+/** Single shared lobby for everyone (PeerJS hub id). */
+const SHARED_LOBBY_ID = 'speeklobbydefault';
 const LOBBY_HEARTBEAT_MS = 12000;
 
 const state = {
@@ -109,7 +108,7 @@ const state = {
 /** @type {ReturnType<typeof createPairingController>|null} */
 let pairing = null;
 
-/** Firm lobby presence (separate PeerJS session from voice rooms). */
+/** Shared global lobby presence (separate PeerJS session from voice rooms). */
 const lobby = {
   spaceId: '',
   displayName: '',
@@ -137,26 +136,14 @@ function normalizeRoom(raw) {
     .slice(0, 8);
 }
 
-function normalizeSpace(raw) {
-  const cleaned = String(raw || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 32);
-  return cleaned || DEFAULT_SPACE;
-}
-
 function hostPeerId(roomCode) {
   // PeerJS IDs: keep alphanumeric; prefix avoids collisions with other apps.
   return `scv1${roomCode.toLowerCase()}`;
 }
 
-/** Well-known lobby hub id derived from firm space (PeerJS alphanumeric-safe). */
-function lobbyPeerId(spaceId) {
-  const space = normalizeSpace(spaceId).replace(/-/g, '');
-  return `speeklobby${space}`;
+/** Well-known shared lobby hub id (PeerJS alphanumeric-safe). */
+function lobbyPeerId() {
+  return SHARED_LOBBY_ID;
 }
 
 function deviceLabel() {
@@ -264,22 +251,6 @@ function loadRoomExpiry(code) {
 function clearRoomExpiry() {
   state.roomExpiresAt = null;
   saveRoomExpiry('', null);
-}
-
-function savedSpace() {
-  try {
-    return localStorage.getItem('speek-space') || '';
-  } catch {
-    return '';
-  }
-}
-
-function saveSpace(spaceId) {
-  try {
-    localStorage.setItem('speek-space', spaceId);
-  } catch {
-    /* ignore */
-  }
 }
 
 function selectedMode() {
@@ -1083,10 +1054,10 @@ async function createAsHostOrGuest(roomCode) {
   });
 }
 
-async function createLobbyHostOrGuest(spaceId) {
-  const hostId = lobbyPeerId(spaceId);
+async function createLobbyHostOrGuest() {
+  const hostId = lobbyPeerId();
   lobby.hostId = hostId;
-  lobby.spaceId = normalizeSpace(spaceId);
+  lobby.spaceId = SHARED_LOBBY_ID;
 
   const hostTry = new Peer(hostId, PEER_OPTS);
   try {
@@ -1117,7 +1088,7 @@ async function createLobbyHostOrGuest(spaceId) {
 
   await new Promise((resolve, reject) => {
     const t = setTimeout(
-      () => reject(new Error('Lobby nicht erreichbar. Space prüfen oder Seite neu laden.')),
+      () => reject(new Error('Lobby nicht erreichbar. Seite neu laden und erneut versuchen.')),
       12000
     );
     conn.on('open', () => {
@@ -1253,12 +1224,9 @@ async function enterLobby() {
   }
 
   const name = els.nameInput.value.trim() || `Gast-${Math.floor(Math.random() * 90 + 10)}`;
-  const spaceId = normalizeSpace(els.spaceInput.value);
-  els.spaceInput.value = spaceId;
   lobby.displayName = name;
   state.displayName = name;
   saveName(name);
-  saveSpace(spaceId);
 
   els.enterLobbyBtn.disabled = true;
   els.enterLobbyBtn.textContent = 'Verbinde…';
@@ -1266,12 +1234,11 @@ async function enterLobby() {
   els.lobbyJoinHint.textContent = 'Lobby über PeerJS…';
 
   try {
-    await createLobbyHostOrGuest(spaceId);
+    await createLobbyHostOrGuest();
     wireLobbyPeerEvents();
     startLobbyHeartbeat();
 
     els.lobbyYouName.textContent = name;
-    els.spaceLabel.textContent = lobby.spaceId;
     setLobbyStatus(lobby.isHost ? 'Online · Lobby-Host' : 'Online');
 
     els.lobbyJoinPanel.classList.add('hidden');
@@ -1487,7 +1454,7 @@ function leaveLobby() {
   els.enterLobbyBtn.disabled = false;
   els.enterLobbyBtn.textContent = 'Lobby betreten';
   els.lobbyJoinHint.textContent =
-    'Gleicher Space = gleiche Online-Liste. Raumcode brauchst du erst zum Speeken.';
+    'Name → Online-Liste → „Code anfragen“ oder Raumcode zum Speeken.';
   els.lobbyJoinHint.classList.remove('warn');
 }
 
@@ -1499,7 +1466,7 @@ function showRoomJoinFromLobby() {
   if (lobby.selfId) {
     els.enterLobbyBtn.textContent = 'Zurück zur Lobby';
     els.lobbyJoinHint.textContent =
-      'Du bleibst online im Space. Raumcode eingeben zum Speeken — oder zurück zur Online-Liste.';
+      'Du bleibst online in der Lobby. Raumcode eingeben zum Speeken — oder zurück zur Online-Liste.';
     els.lobbyJoinHint.classList.remove('warn');
   }
   els.roomInput.focus();
@@ -1527,7 +1494,6 @@ function boot() {
   }
 
   els.nameInput.value = savedName();
-  els.spaceInput.value = normalizeSpace(savedSpace() || DEFAULT_SPACE);
   const room = normalizeRoom(savedRoom()) || generateRoomCode();
   els.roomInput.value = room;
 
@@ -1560,12 +1526,6 @@ function boot() {
       else enterLobby();
     }
   });
-  els.spaceInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      if (lobby.selfId && lobby.peer) returnToLobbyUi();
-      else enterLobby();
-    }
-  });
   els.leaveTalkBtn.addEventListener('click', leaveTalk);
   els.leaveRoomBtn.addEventListener('click', leaveRoom);
   els.leaveLobbyBtn.addEventListener('click', leaveLobby);
@@ -1582,10 +1542,11 @@ function boot() {
       })),
     getSelf: () => (lobby.selfId ? lobbySelfMeta() : null),
     getSpaceId: () => lobby.spaceId || null,
+    getLobbyId: () => SHARED_LOBBY_ID,
     isConnected: () => !!(lobby.peer && lobby.selfId),
     connectPeer: connectLobbyPeer,
     lobbyPeerId,
-    normalizeSpace,
+    sharedLobbyId: SHARED_LOBBY_ID,
     on: onLobbyEvent,
     off: (eventName, handler) => lobbyListeners.get(eventName)?.delete(handler),
   };
@@ -1603,12 +1564,13 @@ function boot() {
       connected: !!(state.peer && state.selfId),
       lobbyConnected: !!(lobby.peer && lobby.selfId),
       spaceId: lobby.spaceId || null,
+      lobbyId: SHARED_LOBBY_ID,
       lobbyPeers: lobbyApi.getPeers(),
     }),
     normalizeRoom,
     hostPeerId,
     lobbyPeerId,
-    normalizeSpace,
+    sharedLobbyId: SHARED_LOBBY_ID,
     joinWithPairedCode,
     requestPair: (peerId, name) => pairing?.requestCode(peerId, name),
     approvePair: () => pairing?.approveIncoming(),

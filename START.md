@@ -10,11 +10,11 @@ Du brauchst **kein** Node.js, **kein** WLAN-Setup und **keine** Firewall.
 
 ---
 
-## 2. Lobby (Online sehen)
+## 2. Lobby (sehen, wer online ist)
 
 1. Tippe deinen **Namen**.
-2. Optional: **Firma / Space** (Standard: `firm`) — gleicher Space = gleiche Online-Liste.
-3. **Lobby betreten** — du siehst unter **Online**, wer gerade da ist. **Noch kein Raumcode nötig.**
+2. **Lobby betreten** — alle Nutzer:innen landen in **derselben** gemeinsamen Lobby.
+3. Unter **Lobby** siehst du, **wer online ist**. **Noch kein Raumcode nötig.**
 
 ---
 
@@ -57,7 +57,7 @@ Du brauchst **kein** Node.js, **kein** WLAN-Setup und **keine** Firewall.
 | Problem | Tipp |
 |---------|------|
 | Kein Mikrofon | Seite muss **https://** sein (nicht http außer localhost). |
-| Lobby leer | Gleichen **Space** prüfen; beide Seiten neu laden. |
+| Lobby leer | Beide Seiten neu laden; kurz warten — alle sind in derselben Lobby. |
 | Niemand im Raum | Gleichen **Raumcode** prüfen; beide Seiten neu laden. |
 | Kein Ton | Einmal auf die Sprechtaste tippen (Browser-Audio freigeben); Lautsprecher/Headset prüfen. |
 | Echo | Kopfhörer nutzen, wenn zwei Geräte im selben Raum sind. |

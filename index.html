@@ -19,27 +19,22 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <h1>Speek</h1>
     </div>
-    <p class="tagline">Lobby Online sehen — dann Raumcode teilen und speeken.</p>
+    <p class="tagline">Namen eingeben → Online sehen → Code anfragen oder Raumcode.</p>
   </header>
 
   <main>
     <section class="join-panel" id="lobbyJoinPanel">
-      <!-- Hook for extra lobby/space UI. Keep id stable. -->
+      <!-- Hook for extra lobby UI. Keep id stable. -->
       <div id="lobbySlot" class="ext-slot" hidden></div>
 
       <label class="field">
         <span>Dein Name</span>
         <input id="nameInput" type="text" maxlength="40" autocomplete="nickname" placeholder="z.&nbsp;B. Markus" />
-      </label>
-
-      <label class="field">
-        <span>Firma / Space <em class="optional">(optional)</em></span>
-        <input id="spaceInput" type="text" maxlength="32" autocomplete="organization" placeholder="firm" spellcheck="false" />
-        <span class="field-hint">Gleicher Space = gleiche Online-Liste (Standard: firm).</span>
+        <span class="field-hint">Nur den Namen eingeben — alle landen in derselben Lobby.</span>
       </label>
 
       <button type="button" class="btn primary" id="enterLobbyBtn">Lobby betreten</button>
-      <p class="hint" id="lobbyJoinHint">Online ohne Raumcode — Code brauchst du erst zum Speeken.</p>
+      <p class="hint" id="lobbyJoinHint">Name → Online-Liste → „Code anfragen“ oder Raumcode zum Speeken.</p>
 
       <details class="room-details" id="roomJoinDetails">
         <summary>Mit Raumcode speeken</summary>
@@ -83,24 +78,27 @@
     <section class="session hidden" id="lobbyPanel">
       <div class="you-row">
         <div>
-          <p class="eyebrow">Space <span id="spaceLabel">—</span></p>
+          <p class="eyebrow">Du</p>
           <p class="you-name" id="lobbyYouName">—</p>
         </div>
         <p class="status-pill" id="lobbyStatus">Verbinde…</p>
       </div>
 
       <div class="peers-head">
-        <h2 id="lobbyHeading">Online</h2>
+        <div class="peers-head-copy">
+          <h2 id="lobbyHeading">Lobby</h2>
+          <p class="peers-sub" id="lobbySub">sehen, wer online ist</p>
+        </div>
         <span class="count" id="lobbyPeerCount">0</span>
       </div>
       <ul class="peer-list lobby-list" id="lobbyPeerList"></ul>
-      <p class="empty" id="emptyLobby">Noch niemand sonst in diesem Space.</p>
+      <p class="empty" id="emptyLobby">Noch niemand sonst online. Warte oder lade neu.</p>
       <p class="hint" id="pairHint"></p>
 
       <details class="room-details room-from-lobby" id="lobbyRoomDetails">
         <summary>Mit Raumcode speeken</summary>
         <div class="room-details-body">
-          <p class="hint lobby-room-copy">Raumcode teilen — oder „Code anfragen“ bei einer Online-Person.</p>
+          <p class="hint lobby-room-copy">Bei jemandem „Code anfragen“ — oder Raumcode manuell teilen.</p>
           <button type="button" class="btn secondary" id="openRoomFromLobbyBtn">Raumcode eingeben</button>
         </div>
       </details>

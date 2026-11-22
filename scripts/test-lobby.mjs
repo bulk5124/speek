@@ -1,5 +1,5 @@
 /**
- * Two browser contexts enter the same firm space lobby and assert Online presence.
+ * Two browser contexts enter the shared global lobby and assert Online presence.
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ import { chromium } from 'playwright';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PORT = 8767;
-const SPACE = 'firmtest' + Math.floor(Math.random() * 900 + 100);
+const EXPECTED_LOBBY_ID = 'speeklobbydefault';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -46,8 +46,11 @@ function serve() {
 
 async function enterLobbyAs(page, name) {
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  // Shared lobby: only display name — no Space / Firma field.
+  if (await page.$('#spaceInput')) {
+    throw new Error('spaceInput must not exist in shared-lobby UI');
+  }
   await page.fill('#nameInput', name);
-  await page.fill('#spaceInput', SPACE);
   await page.click('#enterLobbyBtn');
   await page.waitForFunction(() => window.__speek?.lobby?.isConnected?.() === true, null, {
     timeout: 25000,
@@ -64,17 +67,24 @@ async function main() {
     const pageA = await ctxA.newPage();
     const pageB = await ctxB.newPage();
 
-    console.log(`Space: ${SPACE}`);
+    console.log(`Shared lobby: ${EXPECTED_LOBBY_ID}`);
     await enterLobbyAs(pageA, 'Alice');
     const stateA1 = await pageA.evaluate(() => {
       const s = window.__speek.getState();
       return {
+        lobbyId: s.lobbyId,
         spaceId: s.spaceId,
         lobbyConnected: s.lobbyConnected,
-        hostId: window.__speek.lobbyPeerId(s.spaceId),
+        hostId: window.__speek.lobbyPeerId(),
       };
     });
     console.log('A lobby', stateA1);
+    if (stateA1.hostId !== EXPECTED_LOBBY_ID) {
+      throw new Error(`Expected lobby hub ${EXPECTED_LOBBY_ID}, got ${stateA1.hostId}`);
+    }
+    if (stateA1.lobbyId !== EXPECTED_LOBBY_ID) {
+      throw new Error(`Expected lobbyId ${EXPECTED_LOBBY_ID}, got ${stateA1.lobbyId}`);
+    }
 
     await enterLobbyAs(pageB, 'Bob');
 
@@ -90,25 +100,34 @@ async function main() {
     );
 
     const heading = await pageA.textContent('#lobbyHeading');
+    const subtitle = await pageA.textContent('#lobbySub');
     const actionsSlots = await pageA.$$eval('.peer-actions', (els) => els.length);
 
     const finalA = await pageA.evaluate(() => ({
       peers: window.__speek.lobby.getPeers(),
+      lobbyId: window.__speek.lobby.getLobbyId(),
       space: window.__speek.lobby.getSpaceId(),
       self: window.__speek.lobby.getSelf(),
     }));
     const finalB = await pageB.evaluate(() => ({
       peers: window.__speek.lobby.getPeers(),
+      lobbyId: window.__speek.lobby.getLobbyId(),
       space: window.__speek.lobby.getSpaceId(),
     }));
 
-    if (heading !== 'Online') throw new Error(`Expected Online heading, got ${heading}`);
+    if (heading?.trim() !== 'Lobby') throw new Error(`Expected Lobby heading, got ${heading}`);
+    if (!subtitle?.includes('online')) {
+      throw new Error(`Expected lobby subtitle about online, got ${subtitle}`);
+    }
     if (actionsSlots < 1) throw new Error('Expected .peer-actions hook slots for pairing');
+    if (finalA.lobbyId !== finalB.lobbyId || finalA.lobbyId !== EXPECTED_LOBBY_ID) {
+      throw new Error(`Lobby id mismatch A=${finalA.lobbyId} B=${finalB.lobbyId}`);
+    }
 
-    console.log('PASS: lobby mutual presence', {
+    console.log('PASS: shared lobby mutual presence', {
       A_peers: finalA.peers,
       B_peers: finalB.peers,
-      space: finalA.space,
+      lobbyId: finalA.lobbyId,
       actionsSlots,
     });
   } finally {
