@@ -52,6 +52,18 @@ Du brauchst **kein** Node.js, **kein** WLAN-Setup und **keine** Firewall.
 
 ---
 
+## Firma / gleiches WLAN (ohne Cloud)
+
+Wenn die IT einen **PeerServer im LAN** betreibt (siehe [`docs/speek-private-firm-hosting.md`](./docs/speek-private-firm-hosting.md)):
+
+1. Die **LAN-HTTPS-URL** öffnen (oft mit `?peerHost=…&peerPort=…` — wird gespeichert).
+2. Zertifikatswarnung einmal akzeptieren.
+3. Wie oben Lobby → speeken — **nur Geräte im gleichen WLAN**.
+
+Öffentliche Demo-Links ohne Parameter nutzen weiter die PeerJS-Cloud.
+
+---
+
 ## Probleme?
 
 | Problem | Tipp |
@@ -59,5 +71,6 @@ Du brauchst **kein** Node.js, **kein** WLAN-Setup und **keine** Firewall.
 | Kein Mikrofon | Seite muss **https://** sein (nicht http außer localhost). |
 | Lobby leer | Beide Seiten neu laden; kurz warten — alle sind in derselben Lobby. |
 | Niemand im Raum | Gleichen **Raumcode** prüfen; beide Seiten neu laden. |
+| LAN: keine Verbindung | PeerServer gestartet? Gleiches WLAN? Firewall Port frei? Query `peerHost` korrekt? |
 | Kein Ton | Einmal auf die Sprechtaste tippen (Browser-Audio freigeben); Lautsprecher/Headset prüfen. |
 | Echo | Kopfhörer nutzen, wenn zwei Geräte im selben Raum sind. |
