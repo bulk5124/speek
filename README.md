@@ -36,13 +36,21 @@ Ausführlich: [`START.md`](./START.md)
 
 - **Frontend:** statisches HTML/CSS/JS
 - **Shared Lobby:** PeerJS-Hub-ID `speeklobbydefault` — eine Online-Liste für alle
-- **Signaling / Room presence:** PeerJS Cloud (`0.peerjs.com`) — Raum-Host-Peer-ID `scv1{code}`
+- **Signaling / Room presence:** PeerJS — Default **Cloud** (`0.peerjs.com`); Firmenpfad: **LAN PeerServer** ([`peerserver/`](./peerserver/), Raum-Host-Peer-ID `scv1{code}`)
+- **Peer-Host konfigurierbar:** Query / `localStorage` / `window.SPEEK_PEER_CONFIG` — siehe [`peer-config.js`](./peer-config.js)
 - **Medien:** WebRTC `MediaConnection` (Audio-Tracks), PTT via `MediaStreamTrack.enabled` (unverändert)
 - **1:1:** eine Medienverbindung zum gewählten Peer
 - **Gruppe:** Mesh zwischen Teilnehmern im Raum (kleine Gruppen)
 - **Safe-code pairing:** `pairing.js` — DataConnection `pair-request` / `pair-approve` / `pair-deny`; UI-Hook `speek:lobby-peer-actions` → „Code anfragen“
 
-Optionaler **lokaler** LAN-Pfad bleibt unter `apps/lan-ptt/` (eigener Node-Server) — nicht Teil dieses Hosted-Flows.
+### LAN / Firma (Option 2)
+
+```bash
+cd peerserver && npm install && npm run certs && npm run start:lan
+# → https://<LAN-IP>:8443/?peerHost=…&peerPort=8443&peerPath=/peerjs&peerSecure=1
+```
+
+Nur gleiches WLAN; kein öffentliches GitHub nötig. Anleitung: [`docs/speek-private-firm-hosting.md`](./docs/speek-private-firm-hosting.md).
 
 ---
 
@@ -61,7 +69,8 @@ Automatische Signaling-Tests (Playwright):
 
 ```bash
 npm install
-npm test              # room-code crypto helper
+npm test              # room-code + peer-config
+npm run test:peerserver   # nach: cd peerserver && npm install
 npm run test:join
 npm run test:lobby
 npm run test:pairing
@@ -94,10 +103,10 @@ Alternative: GitHub Pages / Cloudflare Pages / Netlify (static). Signaling bleib
 
 ## Grenzen
 
-- PeerJS-Cloud und öffentliche STUN sind **kostenlos**, aber Drittanbieter — bei Ausfall kurz warten oder Code neu versuchen.
-- Harte NATs ohne TURN: Verbindung kann scheitern (selten zwischen Handy-LTE und Heimnetz).
+- PeerJS-Cloud und öffentliche STUN sind **kostenlos**, aber Drittanbieter — bei Ausfall kurz warten oder Code neu versuchen (Demo-Pfad).
+- **LAN-Pfad:** PeerServer muss laufen; Gast-WLAN mit Client-Isolation oft problematisch; außerhalb des LANs kein Signaling.
+- Harte NATs ohne TURN: Verbindung kann scheitern (selten zwischen Handy-LTE und Heimnetz) — betrifft vor allem Cloud-Pfad.
 - Mesh skaliert für kleine Gruppen (~2–6), nicht für große Konferenzen.
-- Gast-WLAN mit Client-Isolation betrifft **nicht** diesen Hosted-Pfad (kein LAN nötig).
 
 ---
 

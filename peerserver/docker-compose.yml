@@ -1,0 +1,22 @@
+# Speek LAN PeerServer (signaling only).
+# Bind to the LAN host — do not publish 9000 on the public internet.
+#
+#   cd peerserver && docker compose up -d
+#   Client: https://<pages-or-static>/?peerHost=<LAN-IP>&peerPort=9000&peerPath=/peerjs&peerSecure=0
+#
+# For one-box HTTPS + static (recommended firm pilot), prefer:
+#   npm run certs && npm run start:lan
+services:
+  peerserver:
+    build: .
+    image: speek-peerserver:local
+    # Official alternative (no build): image: peerjs/peerjs-server:latest
+    # command: ["--port", "9000", "--path", "/peerjs", "--allow_discovery", "false"]
+    ports:
+      - "9000:9000"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "9000"
+      PEER_PATH: "/peerjs"
+      PEER_KEY: "peerjs"
+    restart: unless-stopped

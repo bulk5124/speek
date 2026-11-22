@@ -3,11 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Speek — hosted room-code push-to-talk via PeerJS + WebRTC",
+  "description": "Speek — hosted room-code push-to-talk via PeerJS + WebRTC (cloud or LAN PeerServer)",
   "scripts": {
     "start": "python3 -m http.server 8765 --bind 127.0.0.1",
-    "test": "node scripts/test-room-code.mjs",
+    "peerserver": "npm --prefix peerserver start",
+    "peerserver:lan": "npm --prefix peerserver run start:lan",
+    "test": "node scripts/test-room-code.mjs && node scripts/test-peer-config.mjs",
     "test:room-code": "node scripts/test-room-code.mjs",
+    "test:peer-config": "node scripts/test-peer-config.mjs",
+    "test:peerserver": "node scripts/test-peerserver.mjs",
+    "test:peer-host-ui": "node scripts/test-peer-host-ui.mjs",
     "test:join": "node scripts/test-join.mjs",
     "test:lobby": "node scripts/test-lobby.mjs",
     "test:pairing": "node scripts/test-pairing.mjs"

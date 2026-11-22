@@ -1,8 +1,9 @@
 /**
- * Speek hosted — shared global lobby + room-code PTT over PeerJS cloud + WebRTC media (DTLS-SRTP).
+ * Speek hosted — shared global lobby + room-code PTT over PeerJS + WebRTC media (DTLS-SRTP).
  * Lobby: single well-known PeerJS id `speeklobbydefault` (everyone in one Online list).
  * Voice: PeerJS DataConnections for presence; MediaConnections for P2P audio.
  * PeerJS room host-ID prefix `scv1` is protocol-stable — keep for room compatibility.
+ * Signaling host: public PeerJS cloud by default; LAN PeerServer via query/localStorage (peer-config.js).
  *
  * Safe-code pairing (`pairing.js`):
  * - Injects „Code anfragen“ via `speek:lobby-peer-actions`
@@ -12,6 +13,12 @@
 
 import { createPairingController, PAIR_TTL_MS } from './pairing.js';
 import { generateRoomCode } from './room-code.js';
+import {
+  PEER_STORAGE_KEY,
+  peerConfigLabel,
+  resolvePeerConfig,
+  toPeerJsOptions,
+} from './peer-config.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -61,19 +68,26 @@ const els = {
   pairDenyBtn: $('pairDenyBtn'),
 };
 
-const PEER_OPTS = {
-  host: '0.peerjs.com',
-  port: 443,
-  path: '/',
-  secure: true,
-  debug: 1,
-  config: {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ],
+const peerResolved = resolvePeerConfig({
+  persist: (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* ignore quota / private mode */
+    }
   },
-};
+  clearPersisted: (key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  },
+});
+
+/** PeerJS options — cloud default, or LAN PeerServer from query / localStorage / SPEEK_PEER_CONFIG. */
+const PEER_OPTS = toPeerJsOptions(peerResolved.config);
+const PEER_SOURCE = peerResolved.source;
 
 const AVATAR_COLORS = ['#0b6e6e', '#2a5f8f', '#8a4b2a', '#5a4a8f', '#2f6b6b', '#6b3a4a'];
 /** Single shared lobby for everyone (PeerJS hub id). */
@@ -1617,6 +1631,12 @@ function boot() {
       spaceId: lobby.spaceId || null,
       lobbyId: SHARED_LOBBY_ID,
       lobbyPeers: lobbyApi.getPeers(),
+      peerHost: PEER_OPTS.host,
+      peerPort: PEER_OPTS.port,
+      peerPath: PEER_OPTS.path,
+      peerSecure: PEER_OPTS.secure,
+      peerSource: PEER_SOURCE,
+      peerLabel: peerConfigLabel(peerResolved.config),
     }),
     normalizeRoom,
     hostPeerId,
@@ -1626,10 +1646,15 @@ function boot() {
     requestPair: (peerId, name) => pairing?.requestCode(peerId, name),
     approvePair: () => pairing?.approveIncoming(),
     generateRoomCode,
+    peerConfig: () => ({ ...peerResolved.config, source: PEER_SOURCE, storageKey: PEER_STORAGE_KEY }),
     lobby: lobbyApi,
   };
   window.__speek = testApi;
   window.__speedchat = testApi; // legacy alias
+
+  if (PEER_SOURCE !== 'cloud-default') {
+    console.info(`[speek] PeerJS signaling: ${peerConfigLabel(peerResolved.config)} (${PEER_SOURCE})`);
+  }
 }
 
 boot();
